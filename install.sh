@@ -39,7 +39,15 @@ fi
 print_banner
 
 # =============================================================================
-# 1. ATUALIZAR SISTEMA
+# 1. DETECTAR VERSÃO DO SISTEMA
+# =============================================================================
+print_step "Detectando sistema operacional..."
+
+OS_VERSION=$(lsb_release -rs 2>/dev/null || cat /etc/os-release | grep VERSION_ID | cut -d'"' -f2 | head -1)
+print_warning "Versão do sistema: $OS_VERSION"
+
+# =============================================================================
+# 2. ATUALIZAR SISTEMA
 # =============================================================================
 print_step "Atualizando sistema..."
 export DEBIAN_FRONTEND=noninteractive
@@ -47,21 +55,36 @@ apt update -y && apt upgrade -y
 print_success "Sistema atualizado"
 
 # =============================================================================
-# 2. INSTALAR NODE.JS 20.x
+# 3. INSTALAR NODE.JS - TRATAR COMPATIBILIDADE
 # =============================================================================
-print_step "Instalando Node.js 20.x..."
+print_step "Instalando Node.js..."
 
+# Verificar libc6
+LIBC_VERSION=$(ldd --version 2>/dev/null | head -1 | awk '{print $NF}')
+print_warning "Versão do libc6: $LIBC_VERSION"
+
+# Tentar instalar Node.js 20 primeiro
 if command -v node &> /dev/null; then
     CURRENT_NODE=$(node -v | cut -d'v' -f1 | cut -d'.' -f1)
     if [ "$CURRENT_NODE" -ge 18 ]; then
         print_warning "Node.js já instalado: $(node -v)"
     else
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-        apt-get install -y nodejs
+        # Tentar Node 18
+        print_warning "Tentando Node.js 18.x..."
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs
     fi
 else
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs
+    # Primeira tentativa - Node 20
+    if ! curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null; then
+        print_warning "Node 20 falhou, tentando Node 18..."
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || true
+    fi
+    apt-get install -y nodejs || {
+        # Ultima tentativa - Node 16 que tem binários estáticos
+        print_warning "Tentando Node.js 16 (versão mais compatível)..."
+        curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
+        apt-get install -y nodejs
+    }
 fi
 
 print_success "Node.js instalado: $(node -v)"
