@@ -131,7 +131,8 @@ print_success "Ferramentas instaladas"
 # =============================================================================
 print_step "Instalando PM2..."
 npm install -g pm2
-pm2 install pm2-logrotation
+# pm2-logrotate não é mais necessário no PM2 mais recente
+# O PM2 já tem log management integrado
 print_success "PM2 instalado"
 
 # =============================================================================
