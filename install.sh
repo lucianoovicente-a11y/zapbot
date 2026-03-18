@@ -261,11 +261,13 @@ if [ -n "$INPUT_DOMAIN" ]; then
     DOMAIN="$INPUT_DOMAIN"
 fi
 
+print_warning "Configurando Nginx para: $DOMAIN"
+
 # Backup config padrão
 cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak 2>/dev/null || true
 
 # Criar config do site
-cat > /etc/nginx/sites-available/zappbot << NGINXCONF
+cat > /etc/nginx/sites-available/zappbot << 'NGINXCONF'
 server {
     listen 80;
     server_name $DOMAIN;

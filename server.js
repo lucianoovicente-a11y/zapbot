@@ -26,9 +26,10 @@ const crypto = require('crypto');
 const archiver = require('archiver');
 const AdmZip = require('adm-zip');
 const multer = require('multer');
+require('dotenv').config();
+
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai'); 
 const clientRoutes = require('./client-routes');
-require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
@@ -263,9 +264,19 @@ app.post('/login', (req, res) => {
 // Google Auth - apenas se configurado e estratégia disponível
 const googleAuthConfigured = GoogleStrategy && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET;
 if (googleAuthConfigured) {
-    app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-    app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/?error=google' }), (req, res) => {
-        res.redirect('/');
+    app.get('/auth/google', (req, res, next) => {
+        if (!googleAuthConfigured) return res.redirect('/');
+        passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+    });
+    app.get('/auth/google/callback', (req, res, next) => {
+        if (!googleAuthConfigured) return res.redirect('/');
+        passport.authenticate('google', { failureRedirect: '/?error=google' }, (err, user) => {
+            if (err || !user) return res.redirect('/?error=google');
+            req.logIn(user, (err) => {
+                if (err) return res.redirect('/?error=google');
+                res.redirect('/');
+            });
+        })(req, res, next);
     });
 }
 
