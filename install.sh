@@ -43,8 +43,15 @@ print_banner
 # =============================================================================
 print_step "Detectando sistema operacional..."
 
-OS_VERSION=$(lsb_release -rs 2>/dev/null || cat /etc/os-release | grep VERSION_ID | cut -d'"' -f2 | head -1)
-print_warning "Versão do sistema: $OS_VERSION"
+# Detectar versão do Ubuntu
+if [ -f /etc/lsb-release ]; then
+    OS_VERSION=$(lsb_release -rs 2>/dev/null)
+    OS_CODENAME=$(lsb_release -cs 2>/dev/null)
+else
+    OS_VERSION=$(cat /etc/os-release | grep VERSION_ID | cut -d'"' -f2 | head -1)
+    OS_CODENAME=$(cat /etc/os-release | grep VERSION_CODENAME | cut -d'"' -f2 | head -1)
+fi
+print_warning "Versão do sistema: $OS_VERSION ($OS_CODENAME)"
 
 # =============================================================================
 # 2. ATUALIZAR SISTEMA
@@ -55,36 +62,41 @@ apt update -y && apt upgrade -y
 print_success "Sistema atualizado"
 
 # =============================================================================
-# 3. INSTALAR NODE.JS - TRATAR COMPATIBILIDADE
+# 3. INSTALAR NODE.JS - COMPATIBILIDADE COM UBUNTU 18.04
 # =============================================================================
 print_step "Instalando Node.js..."
 
-# Verificar libc6
+# Detectar libc6
 LIBC_VERSION=$(ldd --version 2>/dev/null | head -1 | awk '{print $NF}')
 print_warning "Versão do libc6: $LIBC_VERSION"
 
-# Tentar instalar Node.js 20 primeiro
-if command -v node &> /dev/null; then
-    CURRENT_NODE=$(node -v | cut -d'v' -f1 | cut -d'.' -f1)
-    if [ "$CURRENT_NODE" -ge 18 ]; then
+# Se Ubuntu 18.04 (bionic) ou libc6 < 2.28, usar Node 14
+if [ "$OS_CODENAME" = "bionic" ] || [[ "$LIBC_VERSION" < "2.28" ]]; then
+    print_warning "Sistema legado detectado (Ubuntu 18.04). Usando Node.js 14.x..."
+    
+    # Remover nodesource existente
+    rm -f /etc/apt/sources.list.d/nodesource.list
+    rm -rf /var/lib/apt/lists/nodesource*
+    
+    # Instalar Node.js 14.x (último compatível com libc6 2.27)
+    curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
+    apt-get install -y nodejs
+else
+    # Ubuntu 20.04+ pode usar Node 18+
+    if command -v node &> /dev/null; then
         print_warning "Node.js já instalado: $(node -v)"
     else
-        # Tentar Node 18
-        print_warning "Tentando Node.js 18.x..."
-        curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs
+        # Tentar Node 20, se falhar usar 18
+        if ! curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null; then
+            print_warning "Tentando Node.js 18.x..."
+            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+        fi
+        apt-get install -y nodejs || {
+            print_warning "Tentando Node.js 16..."
+            curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
+            apt-get install -y nodejs
+        }
     fi
-else
-    # Primeira tentativa - Node 20
-    if ! curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null; then
-        print_warning "Node 20 falhou, tentando Node 18..."
-        curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || true
-    fi
-    apt-get install -y nodejs || {
-        # Ultima tentativa - Node 16 que tem binários estáticos
-        print_warning "Tentando Node.js 16 (versão mais compatível)..."
-        curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
-        apt-get install -y nodejs
-    }
 fi
 
 print_success "Node.js instalado: $(node -v)"
