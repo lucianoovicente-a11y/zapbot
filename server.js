@@ -13,7 +13,14 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
 const FileStore = require('session-file-store')(session);
 const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
+
+let GoogleStrategy = null;
+try {
+    GoogleStrategy = require('passport-google-oauth20').Strategy;
+} catch (e) {
+    console.warn('passport-google-oauth20 não instalado. Login via Google desabilitado.');
+}
+
 const { MercadoPagoConfig, Payment } = require('mercadopago');
 const crypto = require('crypto');
 const archiver = require('archiver');
@@ -205,8 +212,8 @@ app.use(passport.session());
 const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
 io.use(wrap(sessionMiddleware));
 
-// Passport Config
-if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+// Passport Config - apenas se Google Strategy disponível
+if (GoogleStrategy && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     passport.use(new GoogleStrategy({
         clientID: GOOGLE_CLIENT_ID,
         clientSecret: GOOGLE_CLIENT_SECRET,
@@ -253,10 +260,14 @@ app.post('/login', (req, res) => {
     }
 });
 
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/?error=google' }), (req, res) => {
-    res.redirect('/');
-});
+// Google Auth - apenas se configurado e estratégia disponível
+const googleAuthConfigured = GoogleStrategy && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET;
+if (googleAuthConfigured) {
+    app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+    app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/?error=google' }), (req, res) => {
+        res.redirect('/');
+    });
+}
 
 app.get('/logout', (req, res) => {
     req.logout(() => res.redirect('/'));
@@ -789,7 +800,8 @@ app.get('/api/settings', (req, res) => {
     
     const publicSettings = { 
         appName: settingsData.appName,
-        publicPrices: settingsData.publicPrices
+        publicPrices: settingsData.publicPrices,
+        googleAuthEnabled: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
     };
     res.json(publicSettings);
 });
