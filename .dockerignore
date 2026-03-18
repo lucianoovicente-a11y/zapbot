@@ -1,0 +1,40 @@
+# Node
+node_modules
+npm-debug.log
+package-lock.json
+
+# Logs
+logs
+*.log
+
+# Git
+.git
+.gitignore
+
+# Ambiente
+.env
+.env.local
+.env.*.local
+
+# Backups
+backups
+*.zip
+*.tar.gz
+
+# Auth sessions (são mounted do host)
+auth_sessions
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# SO
+Thumbs.db
+.DS_Store

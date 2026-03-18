@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  zappbot:
+    image: node:20-alpine
+    container_name: zappbot
+    restart: unless-stopped
+    
+    volumes:
+      - .:/var/www/zappbot
+      - zappbot_uploads:/var/www/zappbot/uploads
+      - zappbot_sessions:/var/www/zappbot/auth_sessions
+      - zappbot_logs:/var/www/zappbot/logs
+      - zappbot_backups:/var/www/zappbot/backups
+    
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - SESSION_SECRET=${SESSION_SECRET:-change_this_secret}
+      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:3000}
+      - API_KEYS_GEMINI=${API_KEYS_GEMINI}
+      - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    
+    ports:
+      - "3000:3000"
+    
+    command: >
+      sh -c "
+        npm install --legacy-peer-deps &&
+        node server.js
+      "
+    
+    networks:
+      - zappbot-network
+
+networks:
+  zappbot-network:
+    driver: bridge
+
+volumes:
+  zappbot_uploads:
+  zappbot_sessions:
+  zappbot_logs:
+  zappbot_backups:
