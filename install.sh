@@ -255,13 +255,9 @@ print_success "Pastas criadas"
 # =============================================================================
 print_step "Configurando Nginx..."
 
+# Pegar IP automaticamente
 DOMAIN=$(hostname -I | awk '{print $1}')
-read -p "Digite seu domínio (ou Enter para usar IP): " INPUT_DOMAIN
-if [ -n "$INPUT_DOMAIN" ]; then
-    DOMAIN="$INPUT_DOMAIN"
-fi
-
-print_warning "Configurando Nginx para: $DOMAIN"
+print_warning "Usando IP: $DOMAIN (configure .env para mudar)"
 
 # Backup config padrão
 cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak 2>/dev/null || true
