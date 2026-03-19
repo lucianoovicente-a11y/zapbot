@@ -471,6 +471,44 @@
             socket.on('settings:update',s=>settingsData=s);
             socket.on('clients:list',c=>{clientsData=c;renderClients();});
             socket.on('support-chat-response',d=>addChatMessage(d.text,'bot',d.action));
+            socket.on('bot-log',data=>{
+                const terminal=document.getElementById('terminal-'+data.sessionName);
+                if(terminal){
+                    const line=document.createElement('div');
+                    line.textContent=data.log.substring(0,200);
+                    if(data.log.includes('QR_CODE')){
+                        const qrMatch=data.log.match(/QR_CODE:([^\s]+)/);
+                        if(qrMatch&&qrMatch[1]){
+                            const qrCode=qrMatch[1];
+                            if(botsData[data.sessionName]){
+                                botsData[data.sessionName].qr=qrCode;
+                                botsData[data.sessionName].status='Aguardando QR Code';
+                            }
+                            line.innerHTML='<span class="text-yellow-400">[QR] Escaneie o código abaixo</span>';
+                            renderBots();
+                        }
+                    } else if(data.log.includes('ONLINE')){
+                        if(botsData[data.sessionName]){
+                            botsData[data.sessionName].status='Online';
+                            botsData[data.sessionName].qr=null;
+                        }
+                        line.innerHTML='<span class="text-green-400">[ONLINE] Bot conectado!</span>';
+                        renderBots();
+                    } else if(data.log.includes('ERRO')){
+                        line.className='text-red-400';
+                    }
+                    terminal.appendChild(line);
+                    terminal.scrollTop=terminal.scrollHeight;
+                }
+            });
+            socket.on('bot-online',data=>{
+                if(botsData[data.sessionName]){
+                    botsData[data.sessionName].status='Online';
+                    botsData[data.sessionName].qr=null;
+                    renderBots();
+                    updateStats();
+                }
+            });
         }
         
         async function login(){
@@ -784,18 +822,21 @@
             grid.innerHTML=userBots.map(bot=>{
                 const statusClass=bot.status==='Online'?'status-online':bot.status==='Aguardando QR Code'?'status-waiting':'status-offline';
                 const platformIcon=bot.platform==='telegram'?'fa-telegram':'fa-whatsapp';
-                return`<div class="glass-card rounded-2xl p-6">
-                    <div class="flex justify-between items-start mb-4">
-                        <div><h3 class="text-xl font-bold">${bot.sessionName}</h3><p class="text-gray-400 text-sm"><i class="fab ${platformIcon} mr-1"></i>${bot.platform}</p></div>
-                        <div class="w-3 h-3 rounded-full ${statusClass}"></div>
-                    </div>
-                    <div class="text-sm text-gray-400 mb-4"><p>Status: ${bot.status}</p><p>Criado: ${new Date(bot.createdAt).toLocaleDateString()}</p></div>
-                    <div class="terminal mb-4" id="terminal-${bot.sessionName}"><p class="text-gray-500">Aguardando logs...</p></div>
-                    <div class="flex gap-2">
-                        ${bot.status==='Offline'||bot.status==='Aguardando QR Code'||bot.status==='Iniciando...'?`<button onclick="startBot('${bot.sessionName}')" class="btn-neon text-sm px-4 py-2"><i class="fas fa-play mr-1"></i>Iniciar</button>`:`<button onclick="stopBot('${bot.sessionName}')" class="btn-neon text-sm px-4 py-2" style="background:linear-gradient(45deg,#ff4444,#ff006e)"><i class="fas fa-stop mr-1"></i>Parar</button>`}
-                        <button onclick="deleteBot('${bot.sessionName}')" class="input-glass px-4 py-2 text-red-400 hover:text-red-300"><i class="fas fa-trash"></i></button>
-                    </div>
-                </div>`;
+                const qrImg=bot.qr&&bot.status==='Aguardando QR Code'&&bot.qr.startsWith('data:')?'<img src="'+bot.qr+'" alt="QR Code" class="qr-image mx-auto mb-4" style="max-width:200px;border-radius:10px;">':'';
+                const actionBtn=bot.status==='Offline'||bot.status==='Aguardando QR Code'||bot.status==='Iniciando...'?'<button onclick="startBot(\''+bot.sessionName+'\')" class="btn-neon text-sm px-4 py-2"><i class="fas fa-play mr-1"></i>Iniciar</button>':'<button onclick="stopBot(\''+bot.sessionName+'\')" class="btn-neon text-sm px-4 py-2" style="background:linear-gradient(45deg,#ff4444,#ff006e)"><i class="fas fa-stop mr-1"></i>Parar</button>';
+                return'<div class="glass-card rounded-2xl p-6">'+
+                    '<div class="flex justify-between items-start mb-4">'+
+                        '<div><h3 class="text-xl font-bold">'+bot.sessionName+'</h3><p class="text-gray-400 text-sm"><i class="fab '+platformIcon+' mr-1"></i>'+bot.platform+'</p></div>'+
+                        '<div class="w-3 h-3 rounded-full '+statusClass+'"></div>'+
+                    '</div>'+
+                    '<div class="text-sm text-gray-400 mb-4"><p>Status: '+bot.status+'</p><p>Criado: '+new Date(bot.createdAt).toLocaleDateString()+'</p></div>'+
+                    qrImg+
+                    '<div class="terminal mb-4" id="terminal-'+bot.sessionName+'"><p class="text-gray-500">Aguardando logs...</p></div>'+
+                    '<div class="flex gap-2">'+
+                        actionBtn+
+                        '<button onclick="deleteBot(\''+bot.sessionName+'\')" class="input-glass px-4 py-2 text-red-400 hover:text-red-300"><i class="fas fa-trash"></i></button>'+
+                    '</div>'+
+                '</div>';
             }).join('');
         }
         
@@ -852,9 +893,8 @@
         }
         
         function startBot(sessionName){
-            socket.emit('start-bot',{sessionName});
             socket.emit('join-bot',sessionName);
-            socket.on('bot-log',data=>{if(data.sessionName===sessionName){const terminal=document.getElementById('terminal-'+sessionName);if(terminal){const line=document.createElement('div');line.className=data.log.includes('ERRO')?'error':'log';line.textContent=data.log.substring(0,100);terminal.appendChild(line);terminal.scrollTop=terminal.scrollHeight;}}});
+            socket.emit('start-bot',{sessionName});
         }
         function stopBot(sessionName){socket.emit('stop-bot',{sessionName});}
         function deleteBot(sessionName){if(confirm('Excluir este bot?'))socket.emit('delete-bot',{sessionName});}

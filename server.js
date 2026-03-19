@@ -1443,25 +1443,46 @@ io.on('connection', (socket) => {
             bot.notificationNumber || ''
         ];
         
+        console.log(`[BOT ${sessionName}] Iniciando processo com args:`, args);
+        
         const botProcess = spawn('node', args, {
             cwd: BASE_DIR,
             detached: true,
             stdio: ['ignore', 'pipe', 'pipe']
         });
         
+        console.log(`[BOT ${sessionName}] Processo iniciado com PID: ${botProcess.pid}`);
+        
         bot.processId = botProcess.pid;
         bot.status = 'Iniciando...';
         bot.activated = true;
         
-        botProcess.stdout.on('data', (data) => {
+        botProcess.on('error', (err) => {
+            console.error(`[BOT ${sessionName}] Erro ao iniciar processo:`, err.message);
+        });
+        
+        botProcess.stdout.on('data', async (data) => {
             const output = data.toString();
+            console.log(`[BOT ${sessionName}] stdout: ${output.substring(0, 100)}`);
             if (output.includes('ONLINE')) {
                 botsData[sessionName].status = 'Online';
+                botsData[sessionName].qr = null;
                 io.emit('bots:updated', botsData);
+                io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
             } else if (output.includes('QR_CODE:')) {
+                const qrString = output.split('QR_CODE:')[1].split('\n')[0].trim();
+                console.log(`[BOT ${sessionName}] QR Code detectado: ${qrString.substring(0, 50)}...`);
+                try {
+                    const QRCode = require('qrcode');
+                    const qrDataUrl = await QRCode.toDataURL(qrString, { width: 300, margin: 2 });
+                    botsData[sessionName].qr = qrDataUrl;
+                } catch (e) {
+                    console.error(`[BOT ${sessionName}] Erro ao gerar QR:`, e.message);
+                    botsData[sessionName].qr = qrString;
+                }
                 botsData[sessionName].status = 'Aguardando QR Code';
-                botsData[sessionName].qr = output.split('QR_CODE:')[1].trim();
                 io.emit('bots:updated', botsData);
+                console.log(`[BOT ${sessionName}] Emitindo bots:updated com QR`);
             } else if (output.includes('PAIRING_CODE:')) {
                 botsData[sessionName].status = 'Aguardando QR Code';
                 botsData[sessionName].qr = 'PAIRING_CODE:' + output.split('PAIRING_CODE:')[1].trim();
