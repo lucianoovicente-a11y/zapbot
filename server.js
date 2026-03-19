@@ -710,10 +710,10 @@ app.post('/api/start-bot', (req, res) => {
             io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
         }
         
-        // Verificar QR code completo
-        const qrMatch = qrBuffer.match(/QR_CODE:([A-Za-z0-9+/=]+)/);
+        // Verificar QR code completo - regex mais permissiva
+        const qrMatch = qrBuffer.match(/QR_CODE:(.+?)(?:\n|$)/);
         if (qrMatch && qrMatch[1]) {
-            const qrString = qrMatch[1];
+            const qrString = qrMatch[1].trim();
             console.log(`[QR] QR detectado para ${sessionName}, tamanho: ${qrString.length}`);
             
             if (qrString.length > 20) {
@@ -1578,10 +1578,10 @@ io.on('connection', (socket) => {
                 io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
             }
             
-            // Verificar QR code
-            const qrMatch = chunk.match(/QR_CODE:([A-Za-z0-9+/=]+)/);
+            // Verificar QR code - regex mais permissiva
+            const qrMatch = chunk.match(/QR_CODE:(.+?)(?:\n|$)/);
             if (qrMatch && qrMatch[1]) {
-                const qrString = qrMatch[1];
+                const qrString = qrMatch[1].trim();
                 console.log(`[BOT ${sessionName}] QR detectado, tamanho: ${qrString.length}`);
                 
                 if (qrString.length > 20) {
