@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# ZAPPBOT - INSTALADOR COMPLETO AUTOMÁTICO
+# ZAPPBOT 3D - INSTALADOR COMPLETO (SOBRESCREVE TUDO)
 # Execute: sudo bash install.sh
 # =============================================================================
 
@@ -16,10 +16,10 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Banner
+clear
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║          ZAPPBOT 3D - INSTALADOR AUTOMÁTICO                 ║"
-echo "║     Bot WhatsApp/Telegram + IA + Painel de Gestão           ║"
+echo "║          ZAPPBOT 3D - INSTALADOR AUTOMÁTICO               ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -29,89 +29,72 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}[►] Iniciando instalação automática...${NC}"
+echo -e "${BLUE}[1/8] Parando serviços antigos...${NC}"
+pkill -f "node server.js" 2>/dev/null || true
+pkill -f "node index.js" 2>/dev/null || true
+systemctl stop zappbot 2>/dev/null || true
+echo -e "${GREEN}[✓] Serviços antigos parados${NC}"
 
-# =============================================================================
-# 1. LIMPEZA E CONFIGURAÇÃO INICIAL
-# =============================================================================
-echo -e "${BLUE}[1/6] Preparando sistema...${NC}"
+echo -e "${BLUE}[2/8] Preparando sistema...${NC}"
+export DEBIAN_FRONTEND=noninteractive
 
 # Remover repositórios quebrados
 rm -f /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true
 rm -rf /var/lib/apt/lists/nodesource* 2>/dev/null || true
 rm -f /usr/share/keyrings/nodesource.gpg 2>/dev/null || true
 
-# Atualizar apt
-export DEBIAN_FRONTEND=noninteractive
+# Atualizar
 apt update -qq
+apt upgrade -y -qq
 
-echo -e "${GREEN}[✓] Sistema preparado${NC}"
+echo -e "${GREEN}[✓] Sistema atualizado${NC}"
 
-# =============================================================================
-# 2. INSTALAR NODE.JS 14
-# =============================================================================
-echo -e "${BLUE}[2/6] Instalando Node.js 14...${NC}"
+echo -e "${BLUE}[3/8] Instalando Node.js 14...${NC}"
 
-# Verificar se já tem Node.js
+# Verificar se já tem Node
 if command -v node &> /dev/null; then
-    NODE_VER=$(node -v)
-    echo -e "${YELLOW}[!] Node.js já instalado: $NODE_VER${NC}"
+    echo -e "${YELLOW}   Node.js já existe: $(node -v)${NC}"
 else
-    # Baixar e instalar Node.js 14 via binário
     cd /tmp
-    
-    echo -e "${YELLOW}   Baixando Node.js...${NC}"
+    echo -e "${YELLOW}   Baixando Node.js 14...${NC}"
     wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
-    
-    echo -e "${YELLOW}   Instalando Node.js...${NC}"
     tar -xJf node-v14.21.3-linux-x64.tar.xz
     cp -r node-v14.21.3-linux-x64/* /usr/local/
-    
-    # Symlinks
     ln -sf /usr/local/bin/node /usr/bin/node
     ln -sf /usr/local/bin/npm /usr/bin/npm
     ln -sf /usr/local/bin/npx /usr/bin/npx
-    
-    # Limpar
     rm -rf node-v14.21.3-linux-x64*
 fi
 
 echo -e "${GREEN}[✓] Node.js: $(node -v)${NC}"
 echo -e "${GREEN}[✓] NPM: $(npm -v)${NC}"
 
-# =============================================================================
-# 3. INSTALAR DEPENDÊNCIAS DO SISTEMA
-# =============================================================================
-echo -e "${BLUE}[3/6] Instalando dependências do sistema...${NC}"
-
-apt install -y -qq curl wget git unzip build-essential ca-certificates gnupg lsb-release sudo
+echo -e "${BLUE}[4/8] Instalando dependências...${NC}"
+apt install -y -qq curl wget git unzip build-essential \
+    ca-certificates gnupg lsb-release sudo ufw
 
 echo -e "${GREEN}[✓] Dependências instaladas${NC}"
 
-# =============================================================================
-# 4. CONFIGURAR PROJETO
-# =============================================================================
-echo -e "${BLUE}[4/6] Configurando ZappBot...${NC}"
+echo -e "${BLUE}[5/8] Configurando projeto...${NC}"
 
 # Criar diretório
 PROJECT_DIR="/var/www/zappbot"
+rm -rf "$PROJECT_DIR" 2>/dev/null || true
 mkdir -p "$PROJECT_DIR"
 
-# Copiar arquivos do diretório atual ou criar estrutura básica
+# Copiar arquivos
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 if [ -f "$SCRIPT_DIR/server.js" ]; then
-    echo -e "${YELLOW}   Copiando arquivos...${NC}"
-    cp -r "$SCRIPT_DIR"/* "$PROJECT_DIR/" 2>/dev/null || true
+    cp -r "$SCRIPT_DIR"/* "$PROJECT_DIR/"
 else
-    echo -e "${YELLOW}   Criando estrutura básica...${NC}"
+    echo -e "${RED}[✗] Arquivos do projeto não encontrados!${NC}"
+    exit 1
 fi
 
 cd "$PROJECT_DIR"
 
-# Criar package.json se não existir
-if [ ! -f "package.json" ]; then
-    cat > package.json << 'PKGJSON'
+# Criar package.json
+cat > package.json << 'PKGJSON'
 {
   "name": "zappbot",
   "version": "1.0.0",
@@ -147,57 +130,39 @@ if [ ! -f "package.json" ]; then
   }
 }
 PKGJSON
-fi
 
-# Criar .env se não existir
-if [ ! -f ".env" ]; then
-    DOMAIN=$(hostname -I | awk '{print $1}')
-    cat > .env << ENVFILE
-# ==========================================
-# ZAPPBOT 3D - CONFIGURAÇÕES
-# ==========================================
-
-# Sessão e Segurança
+# Criar .env
+IP=$(hostname -I | awk '{print $1}')
+cat > .env << ENVFILE
 SESSION_SECRET=zappbot_session_$(date +%s)
-PUBLIC_URL=http://$DOMAIN:3000
-SOCKET_URL=http://$DOMAIN:3000
+PUBLIC_URL=http://$IP:3000
+SOCKET_URL=http://$IP:3000
 PORT=3000
 NODE_ENV=production
-
-# API Gemini (OBRIGATÓRIO)
 API_KEYS_GEMINI=SUA_CHAVE_AQUI
-
-# Mercado Pago (opcional)
 MP_ACCESS_TOKEN=
-
-# Configurações do Bot
 DEFAULT_TRIAL_DAYS=3
 ENVFILE
-    echo -e "${YELLOW}[!] ATENÇÃO: Edite o .env e adicione sua API KEY do Gemini!${NC}"
-fi
 
 # Criar diretórios
 mkdir -p auth_sessions uploads backups logs
 
-# =============================================================================
-# 5. INSTALAR DEPENDÊNCIAS NPM
-# =============================================================================
-echo -e "${BLUE}[5/6] Instalando dependências NPM...${NC}"
+echo -e "${GREEN}[✓] Projeto configurado${NC}"
 
-npm install --legacy-peer-deps 2>&1 | tail -5
+echo -e "${BLUE}[6/8] Instalando NPM...${NC}"
+npm install --legacy-peer-deps 2>&1 | tail -3
+echo -e "${GREEN}[✓] NPM instalado${NC}"
 
-echo -e "${GREEN}[✓] Dependências NPM instaladas${NC}"
+echo -e "${BLUE}[7/8] Configurando firewall e inicialização...${NC}"
 
-# =============================================================================
-# 6. INICIAR SERVIÇO
-# =============================================================================
-echo -e "${BLUE}[6/6] Iniciando ZappBot...${NC}"
+# Liberar firewall
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow 3000/tcp
+ufw --force enable
 
-# Parar processos antigos
-pkill -f "node server.js" 2>/dev/null || true
-pkill -f "node index.js" 2>/dev/null || true
-
-# Criar script de inicialização
+# Criar serviço systemd
 cat > /etc/systemd/system/zappbot.service << SYSTEMD
 [Unit]
 Description=ZappBot 3D Service
@@ -216,20 +181,35 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 SYSTEMD
 
-# Ativar e iniciar
+# Recarregar systemd
 systemctl daemon-reload
 systemctl enable zappbot
-systemctl restart zappbot
 
-# Aguardar iniciar
+# Iniciar
+systemctl restart zappbot
 sleep 3
 
-# Verificar status
+echo -e "${GREEN}[✓] Serviço configurado${NC}"
+
+echo -e "${BLUE}[8/8] Verificando instalação...${NC}"
+
+# Verificar se está rodando
 if systemctl is-active --quiet zappbot; then
-    echo -e "${GREEN}[✓] ZappBot iniciado com sucesso!${NC}"
+    echo -e "${GREEN}[✓] ZappBot está rodando!${NC}"
 else
-    echo -e "${YELLOW}[!] ZappBot iniciou, verificando logs...${NC}"
-    journalctl -u zappbot -n 10 --no-pager
+    echo -e "${YELLOW}[!] Verificando status...${NC}"
+    systemctl status zappbot --no-pager | head -10
+fi
+
+# Testar conexão
+sleep 2
+if curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -q "200\|302"; then
+    echo -e "${GREEN}[✓] Servidor respondendo!${NC}"
+else
+    echo -e "${YELLOW}[!] Tentando iniciar diretamente...${NC}"
+    cd "$PROJECT_DIR"
+    node server.js &
+    sleep 3
 fi
 
 # =============================================================================
@@ -239,25 +219,25 @@ IP=$(hostname -I | awk '{print $1}')
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  INSTALAÇÃO CONCLUÍDA COM SUCESSO!${NC}"
+echo -e "${GREEN}          INSTALAÇÃO CONCLUÍDA COM SUCESSO!${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "${YELLOW}📋 INFORMAÇÕES:${NC}"
-echo "   • URL: http://$IP:3000"
-echo "   • Painel: http://$IP:3000"
-echo "   • Usuário: admin"
-echo "   • Senha: admin"
+echo -e "${YELLOW}🌐 ACESSO:${NC}"
+echo "   URL: http://$IP:3000"
 echo ""
-echo -e "${RED}⚠️  IMPORTANTE:${NC}"
-echo "   1. Edite o arquivo /var/www/zappbot/.env"
-echo "   2. Adicione sua API KEY do Gemini"
+echo -e "${YELLOW}🔐 LOGIN:${NC}"
+echo "   Usuário: admin"
+echo "   Senha: admin"
+echo ""
+echo -e "${RED}⚠️  PRÓXIMO PASSO:${NC}"
+echo "   1. Edite: nano /var/www/zappbot/.env"
+echo "   2. Adicione sua API KEY do Gemini em API_KEYS_GEMINI"
 echo "   3. Reinicie: sudo systemctl restart zappbot"
 echo ""
-echo -e "${YELLOW}📚 COMANDOS ÚTEIS:${NC}"
-echo "   • Status:     sudo systemctl status zappbot"
-echo "   • Logs:       sudo journalctl -u zappbot -f"
-echo "   • Reiniciar:  sudo systemctl restart zappbot"
-echo "   • Parar:      sudo systemctl stop zappbot"
+echo -e "${YELLOW}📝 COMANDOS:${NC}"
+echo "   Status:   sudo systemctl status zappbot"
+echo "   Logs:     sudo journalctl -u zappbot -f"
+echo "   Reiniciar: sudo systemctl restart zappbot"
 echo ""
 echo -e "${CYAN}Obrigado por usar ZappBot 3D! 🚀${NC}"
 echo ""
