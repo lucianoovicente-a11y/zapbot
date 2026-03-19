@@ -1,5 +1,5 @@
 // =============================================================================
-// ZAPPBOT - SERVIDOR COMPLETO COM SISTEMA DE REVENDEDORES
+// ZAPPBOT 3D - SERVIDOR COMPLETO COM SISTEMA DE REVENDEDORES
 // =============================================================================
 
 const express = require('express');
@@ -12,14 +12,6 @@ const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
 const FileStore = require('session-file-store')(session);
-const passport = require('passport');
-
-let GoogleStrategy = null;
-try {
-    GoogleStrategy = require('passport-google-oauth20').Strategy;
-} catch (e) {
-    console.warn('passport-google-oauth20 não instalado. Login via Google desabilitado.');
-}
 
 const { MercadoPagoConfig, Payment } = require('mercadopago');
 const crypto = require('crypto');
@@ -29,7 +21,6 @@ const multer = require('multer');
 require('dotenv').config();
 
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai'); 
-const clientRoutes = require('./client-routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,10 +35,12 @@ const CAMPAIGNS_DB_PATH = path.join(BASE_DIR, 'campaigns.json');
 const CLIENTS_DB_PATH = path.join(BASE_DIR, 'clients.json');
 const PAYMENTS_DB_PATH = path.join(BASE_DIR, 'payments.json');
 const RESELLERS_DB_PATH = path.join(BASE_DIR, 'resellers.json');
+const CHECKIN_DB_PATH = path.join(BASE_DIR, 'checkin.json');
 
 const AUTH_SESSIONS_DIR = path.join(BASE_DIR, 'auth_sessions');
 const SESSION_FILES_DIR = path.join(BASE_DIR, 'sessions');
 const BOT_SCRIPT_PATH = path.join(BASE_DIR, 'index.js');
+const CHECKIN_LOG_PATH = path.join(BASE_DIR, 'logs', 'checkin.log');
 
 const pendingPayments = {};
 
@@ -161,6 +154,72 @@ let campaignsData = loadJSON(CAMPAIGNS_DB_PATH, []);
 let clientsData = loadJSON(CLIENTS_DB_PATH, []);
 let paymentsData = loadJSON(PAYMENTS_DB_PATH, []);
 let resellersData = loadJSON(RESELLERS_DB_PATH, {});
+let checkinData = loadJSON(CHECKIN_DB_PATH, {});
+
+// ==========================================
+// CRIAR USUÁRIO ADMIN PADRÃO
+// ==========================================
+const DEFAULT_ADMIN_USER = 'admin';
+const DEFAULT_ADMIN_PASS = 'admin';
+
+function createDefaultAdmin() {
+    if (!usersData[DEFAULT_ADMIN_USER]) {
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 ano
+        
+        usersData[DEFAULT_ADMIN_USER] = {
+            username: DEFAULT_ADMIN_USER,
+            password: hash(DEFAULT_ADMIN_PASS),
+            isAdmin: true,
+            role: 'admin',
+            botLimit: 999,
+            createdAt: now.toISOString(),
+            expiresAt: expiresAt.toISOString(),
+            bots: [],
+            parentReseller: null,
+            trialDays: 365,
+            isActive: true
+        };
+        
+        console.log(`[ADMIN] Usuario admin criado (admin/admin)`);
+        saveJSON(USERS_DB_PATH, usersData);
+        
+        // Log do check-in
+        logCheckin('SYSTEM', 'Admin criado automaticamente');
+    } else {
+        // Verificar se o admin tem os campos necessários
+        if (!usersData[DEFAULT_ADMIN_USER].expiresAt) {
+            const now = new Date();
+            usersData[DEFAULT_ADMIN_USER].expiresAt = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
+            saveJSON(USERS_DB_PATH, usersData);
+        }
+    }
+}
+
+function logCheckin(username, action) {
+    const now = new Date();
+    const logEntry = `[${now.toISOString()}] ${username}: ${action}\n`;
+    
+    // Salvar no log de check-in
+    if (!fs.existsSync('logs')) fs.mkdirSync('logs');
+    fs.appendFileSync(CHECKIN_LOG_PATH, logEntry);
+    
+    // Salvar no array de check-ins
+    if (!checkinData[username]) checkinData[username] = [];
+    checkinData[username].push({
+        timestamp: now.toISOString(),
+        action: action
+    });
+    
+    // Manter apenas últimos 100 check-ins por usuário
+    if (checkinData[username].length > 100) {
+        checkinData[username] = checkinData[username].slice(-100);
+    }
+    
+    saveJSON(CHECKIN_DB_PATH, checkinData);
+}
+
+createDefaultAdmin();
 
 setInterval(() => {
     saveJSON(BOTS_DB_PATH, botsData);
@@ -171,6 +230,7 @@ setInterval(() => {
     saveJSON(CLIENTS_DB_PATH, clientsData);
     saveJSON(PAYMENTS_DB_PATH, paymentsData);
     saveJSON(RESELLERS_DB_PATH, resellersData);
+    saveJSON(CHECKIN_DB_PATH, checkinData);
 }, 30000);
 
 function authUser(username, password) {
@@ -207,41 +267,82 @@ const sessionMiddleware = session({
     cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }
 });
 app.use(sessionMiddleware);
-app.use(passport.initialize());
-app.use(passport.session());
 
 const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
 io.use(wrap(sessionMiddleware));
 
-// Passport Config - apenas se Google Strategy disponível
-if (GoogleStrategy && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
-    passport.use(new GoogleStrategy({
-        clientID: GOOGLE_CLIENT_ID,
-        clientSecret: GOOGLE_CLIENT_SECRET,
-        callbackURL: CALLBACK_URL
-    }, (accessToken, refreshToken, profile, done) => {
-        const username = profile.displayName || profile.emails[0].value;
-        if (!usersData[username]) {
-            usersData[username] = { 
-                username, 
-                password: hash(profile.id),
-                isAdmin: Object.keys(usersData).length === 0,
-                role: Object.keys(usersData).length === 0 ? 'admin' : 'reseller',
-                botLimit: Object.keys(usersData).length === 0 ? 999 : 10,
-                createdAt: new Date().toISOString(),
-                bots: []
-            };
-        }
-        done(null, usersData[username]);
-    }));
+// ==========================================
+// ROTAS DE AUTENTICAÇÃO
+// ==========================================
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(BASE_DIR, 'index.html'));
+});
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    const user = authUser(username, password);
     
-    passport.serializeUser((user, done) => done(null, user.username));
-    passport.deserializeUser((username, done) => done(null, usersData[username] || null));
-}
+    if (user) {
+        // Verificar se a conta ainda é válida
+        if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
+            return res.json({ success: false, message: 'Sua assinatura expirou. Entre em contato com o administrador.' });
+        }
+        
+        req.session.user = user;
+        logCheckin(username, 'Login');
+        res.json({ success: true, user });
+    } else {
+        res.json({ success: false, message: 'Usuário ou senha inválidos' });
+    }
+});
+
+app.get('/logout', (req, res) => {
+    if (req.session.user) {
+        logCheckin(req.session.user.username, 'Logout');
+    }
+    req.session.destroy();
+    res.redirect('/');
+});
+
+// Check-in
+app.get('/api/checkin', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    res.json(checkinData);
+});
+
+app.post('/api/checkin', (req, res) => {
+    if (!req.session.user) {
+        return res.status(401).json({ error: 'Não autenticado' });
+    }
+    const { action } = req.body;
+    logCheckin(req.session.user.username, action || 'Ação não especificada');
+    res.json({ success: true });
+});
+
+// Admin: Reset senha de usuário
+app.post('/api/user/change-credentials-admin', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const { username, newPassword } = req.body;
+    if (!usersData[username]) {
+        return res.json({ success: false, message: 'Usuário não encontrado' });
+    }
+    
+    usersData[username].password = hash(newPassword);
+    saveJSON(USERS_DB_PATH, usersData);
+    logCheckin(req.session.user.username, `Resetou senha de ${username}`);
+    
+    res.json({ success: true });
+});
 
 // =============================================================================
 // ROTAS PRINCIPAIS
 // =============================================================================
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(BASE_DIR, 'index.html'));
 });
@@ -261,27 +362,10 @@ app.post('/login', (req, res) => {
     }
 });
 
-// Google Auth - apenas se configurado e estratégia disponível
-const googleAuthConfigured = GoogleStrategy && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET;
-if (googleAuthConfigured) {
-    app.get('/auth/google', (req, res, next) => {
-        if (!googleAuthConfigured) return res.redirect('/');
-        passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
-    });
-    app.get('/auth/google/callback', (req, res, next) => {
-        if (!googleAuthConfigured) return res.redirect('/');
-        passport.authenticate('google', { failureRedirect: '/?error=google' }, (err, user) => {
-            if (err || !user) return res.redirect('/?error=google');
-            req.logIn(user, (err) => {
-                if (err) return res.redirect('/?error=google');
-                res.redirect('/');
-            });
-        })(req, res, next);
-    });
-}
-
+// Logout
 app.get('/logout', (req, res) => {
-    req.logout(() => res.redirect('/'));
+    req.session.destroy();
+    res.redirect('/');
 });
 
 app.get('/api/user', (req, res) => {
@@ -293,10 +377,18 @@ app.get('/api/user', (req, res) => {
 // API DE REGISTRO (AUTO-REGISTRO)
 // =============================================================================
 app.post('/api/register', async (req, res) => {
-    const { username, password, referrer } = req.body;
+    const { username, password, referrer, role } = req.body;
     
     if (!username || !password) {
         return res.json({ success: false, message: 'Preencha todos os campos' });
+    }
+    
+    if (username.length < 3) {
+        return res.json({ success: false, message: 'Nome de usuário deve ter no mínimo 3 caracteres' });
+    }
+    
+    if (password.length < 4) {
+        return res.json({ success: false, message: 'Senha deve ter no mínimo 4 caracteres' });
     }
     
     if (usersData[username]) {
@@ -306,16 +398,14 @@ app.post('/api/register', async (req, res) => {
     const isFirstUser = Object.keys(usersData).length === 0;
     
     // Verificar referenciador
-    let botLimit = 5;
-    let role = 'cliente';
+    let botLimit = role === 'reseller' ? 50 : 1;
     let parentReseller = null;
     
     if (referrer && usersData[referrer]) {
         const referrerUser = usersData[referrer];
         if (referrerUser.role === 'reseller' || referrerUser.isAdmin) {
             parentReseller = referrer;
-            role = 'cliente';
-            botLimit = referrerUser.botLimit || 5;
+            botLimit = referrerUser.botLimit || (role === 'reseller' ? 50 : 1);
             
             // Atualizar stats do reseller
             if (!resellersData[referrer]) resellersData[referrer] = { clients: [], totalRevenue: 0 };
@@ -323,19 +413,57 @@ app.post('/api/register', async (req, res) => {
         }
     }
     
+    // Primeiro usuário é sempre admin
+    const userRole = isFirstUser ? 'admin' : role;
+    
     usersData[username] = {
         username,
         password: hash(password),
         isAdmin: isFirstUser,
-        role: isFirstUser ? 'admin' : role,
+        role: userRole,
         botLimit: isFirstUser ? 999 : botLimit,
         createdAt: new Date().toISOString(),
+        expiresAt: isFirstUser ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() : null,
         bots: [],
         parentReseller,
-        trialExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+        trialDays: 0,
+        isActive: isFirstUser
     };
     
+    saveJSON(USERS_DB_PATH, usersData);
+    logCheckin(username, `Registro como ${userRole}`);
+    
     res.json({ success: true, message: 'Conta criada com sucesso!' });
+});
+
+// API ATIVAR PLANO
+app.post('/api/user/activate-plan', (req, res) => {
+    if (!req.session.user) {
+        return res.status(401).json({ success: false, message: 'Não autenticado' });
+    }
+    
+    const { planType, days } = req.body;
+    const username = req.session.user.username;
+    
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    
+    // Definir limite de bots baseado no plano
+    let botLimit = 1;
+    if (planType === 'monthly') botLimit = 5;
+    if (planType === 'yearly') botLimit = 10;
+    
+    usersData[username].expiresAt = expiresAt;
+    usersData[username].trialDays = days;
+    usersData[username].isActive = true;
+    usersData[username].botLimit = botLimit;
+    usersData[username].planType = planType;
+    
+    req.session.user = usersData[username];
+    
+    saveJSON(USERS_DB_PATH, usersData);
+    logCheckin(username, `Ativou plano ${planType} (${days} dias)`);
+    
+    res.json({ success: true, expiresAt });
 });
 
 // =============================================================================
@@ -804,6 +932,153 @@ app.get('/api/payments', (req, res) => {
 });
 
 // =============================================================================
+// API - GERENCIAMENTO DE USUÁRIOS (ADMIN)
+// =============================================================================
+
+// Trocar nome de usuário ou senha
+app.post('/api/user/change-credentials', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+    
+    const { currentPassword, newUsername, newPassword } = req.body;
+    const user = req.session.user;
+    
+    // Verificar senha atual
+    if (user.password !== hash(currentPassword)) {
+        return res.json({ success: false, message: 'Senha atual incorreta' });
+    }
+    
+    // Trocar nome de usuário
+    if (newUsername && newUsername !== user.username) {
+        if (usersData[newUsername]) {
+            return res.json({ success: false, message: 'Nome de usuário já existe' });
+        }
+        
+        // Atualizar dados
+        const userData = usersData[user.username];
+        delete usersData[user.username];
+        userData.username = newUsername;
+        usersData[newUsername] = userData;
+        user.username = newUsername;
+        req.session.user = user;
+        
+        logCheckin(newUsername, 'Alterou nome de usuario');
+    }
+    
+    // Trocar senha
+    if (newPassword) {
+        usersData[user.username].password = hash(newPassword);
+        req.session.user.password = hash(newPassword);
+        logCheckin(user.username, 'Alterou senha');
+    }
+    
+    saveJSON(USERS_DB_PATH, usersData);
+    res.json({ success: true, message: 'Credenciais atualizadas!' });
+});
+
+// Admin: Definir tempo contratado de um usuário
+app.post('/api/admin/set-user-expiry', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const { username, days } = req.body;
+    if (!usersData[username]) {
+        return res.json({ success: false, message: 'Usuário não encontrado' });
+    }
+    
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    usersData[username].expiresAt = expiresAt;
+    usersData[username].trialDays = days;
+    usersData[username].isActive = days > 0;
+    
+    saveJSON(USERS_DB_PATH, usersData);
+    logCheckin(req.session.user.username, `Definiu ${days} dias para ${username}`);
+    
+    res.json({ success: true, expiresAt });
+});
+
+// Admin: Ver todos os usuários com detalhes
+app.get('/api/admin/users-detail', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const usersList = Object.values(usersData).map(u => ({
+        username: u.username,
+        role: u.role,
+        isAdmin: u.isAdmin,
+        botLimit: u.botLimit,
+        createdAt: u.createdAt,
+        expiresAt: u.expiresAt,
+        isActive: u.isActive,
+        trialDays: u.trialDays || 0,
+        botsCount: Object.values(botsData).filter(b => b.owner === u.username).length,
+        checkins: (checkinData[u.username] || []).slice(-10)
+    }));
+    
+    res.json(usersList);
+});
+
+// Admin: Atualizar limite de bots de um usuário
+app.post('/api/admin/set-user-botlimit', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const { username, botLimit } = req.body;
+    if (!usersData[username]) {
+        return res.json({ success: false, message: 'Usuário não encontrado' });
+    }
+    
+    usersData[username].botLimit = parseInt(botLimit);
+    saveJSON(USERS_DB_PATH, usersData);
+    logCheckin(req.session.user.username, `Alterou limite de bots de ${username} para ${botLimit}`);
+    
+    res.json({ success: true });
+});
+
+// Admin: Alterar role de um usuário
+app.post('/api/admin/set-user-role', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const { username, role } = req.body;
+    if (!usersData[username]) {
+        return res.json({ success: false, message: 'Usuário não encontrado' });
+    }
+    
+    usersData[username].role = role;
+    usersData[username].isAdmin = role === 'admin';
+    saveJSON(USERS_DB_PATH, usersData);
+    logCheckin(req.session.user.username, `Alterou role de ${username} para ${role}`);
+    
+    res.json({ success: true });
+});
+
+// Admin: Logs de Check-in
+app.get('/api/admin/checkin-logs', (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const logs = [];
+    Object.keys(checkinData).forEach(username => {
+        checkinData[username].forEach(entry => {
+            logs.push({
+                username,
+                ...entry
+            });
+        });
+    });
+    
+    // Ordenar por timestamp (mais recente primeiro)
+    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    res.json(logs.slice(0, 500)); // Últimos 500
+});
+
+// =============================================================================
 // API - CONFIGURAÇÕES
 // =============================================================================
 app.get('/api/settings', (req, res) => {
@@ -858,6 +1133,59 @@ app.post('/api/admin/upload-icons', upload.single('icon'), (req, res) => {
     fs.renameSync(req.file.path, dest);
     
     res.json({ success: true, message: 'Ícone atualizado!' });
+});
+
+app.post('/api/admin/save-settings-full', upload.fields([{ name: 'icon512', maxCount: 1 }, { name: 'icon192', maxCount: 1 }]), (req, res) => {
+    if (!req.session.user || !req.session.user.isAdmin) {
+        return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    try {
+        const body = req.body;
+        
+        settingsData.appName = body.appName || settingsData.appName;
+        settingsData.publicUrl = body.publicUrl;
+        settingsData.contactEmail = body.contactEmail;
+        settingsData.supportWhatsapp = body.supportWhatsapp;
+        settingsData.colorPrimary = body.colorPrimary;
+        settingsData.colorSecondary = body.colorSecondary;
+        settingsData.colorBg = body.colorBg;
+        settingsData.planFreeDays = parseInt(body.planFreeDays) || 1;
+        settingsData.priceMonthly = parseFloat(body.priceMonthly) || 30;
+        settingsData.priceYearly = parseFloat(body.priceYearly) || 250;
+        settingsData.priceResell5 = parseFloat(body.priceResell5) || 100;
+        settingsData.priceResell10 = parseFloat(body.priceResell10) || 180;
+        settingsData.priceResell20 = parseFloat(body.priceResell20) || 300;
+        settingsData.priceResell30 = parseFloat(body.priceResell30) || 400;
+        
+        settingsData.publicPrices = {
+            priceMonthly: settingsData.priceMonthly,
+            priceQuarterly: settingsData.priceQuarterly || 80,
+            priceSemiannual: settingsData.priceSemiannual || 150,
+            priceYearly: settingsData.priceYearly,
+            priceResell5: settingsData.priceResell5,
+            priceResell10: settingsData.priceResell10,
+            priceResell20: settingsData.priceResell20,
+            priceResell30: settingsData.priceResell30
+        };
+        
+        if (req.files?.icon512) {
+            const dest = path.join(BASE_DIR, 'icon-512x512.png');
+            fs.renameSync(req.files.icon512[0].path, dest);
+        }
+        if (req.files?.icon192) {
+            const dest = path.join(BASE_DIR, 'icon-192x192.png');
+            fs.renameSync(req.files.icon192[0].path, dest);
+        }
+        
+        saveJSON(SETTINGS_DB_PATH, settingsData);
+        logCheckin(req.session.user.username, 'Atualizou configurações do sistema');
+        
+        res.json({ success: true, message: 'Configurações salvas!' });
+    } catch (e) {
+        console.error('Erro ao salvar settings:', e);
+        res.json({ success: false, message: e.message });
+    }
 });
 
 // =============================================================================

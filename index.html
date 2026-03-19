@@ -16,6 +16,7 @@
         .glass { background: rgba(10,10,26,0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); }
         .glass-card { background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s ease; }
         .glass-card:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,242,255,0.5); transform: translateY(-5px); }
+        .cursor-pointer { cursor: pointer; }
         .neon-text { text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary); }
         .btn-neon { background: linear-gradient(45deg, var(--primary), var(--secondary)); border: none; padding: 12px 24px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer; transition: all 0.3s ease; }
         .btn-neon:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(0,242,255,0.6); }
@@ -57,19 +58,105 @@
                 <input type="text" id="login-username" class="input-glass" placeholder="Usuário">
                 <input type="password" id="login-password" class="input-glass" placeholder="Senha">
                 <button onclick="login()" class="btn-neon w-full"><i class="fas fa-rocket mr-2"></i>ENTRAR</button>
-                <button onclick="showRegister()" class="text-gray-400 hover:text-white text-sm">Criar nova conta</button>
+                <button onclick="showRegister()" class="input-glass w-full hover:bg-white/10"><i class="fas fa-user-plus mr-2"></i>Criar Nova Conta</button>
             </div>
-            <div class="mt-6 pt-6 border-t border-gray-700"><button onclick="loginWithGoogle()" class="input-glass hover:bg-white/10"><i class="fab fa-google mr-2"></i>Entrar com Google</button></div>
+            <div class="mt-4 text-center text-sm">
+                <p class="text-gray-500">Login padrão: <strong>admin</strong> / <strong>admin</strong></p>
+            </div>
         </div>
     </div>
     <div id="register-modal" class="modal-overlay">
-        <div class="modal-content"><h2 class="text-2xl font-bold neon-text mb-6">Criar Conta</h2>
+        <div class="modal-content" style="max-width:500px">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold neon-text mb-2">Criar Conta</h2>
+                <p class="text-gray-400 text-sm">Escolha como deseja usar o sistema</p>
+            </div>
             <div class="space-y-4">
-                <input type="text" id="reg-username" class="input-glass" placeholder="Usuário">
-                <input type="password" id="reg-password" class="input-glass" placeholder="Senha">
-                <input type="text" id="reg-referrer" class="input-glass" placeholder="Código do Revendedor (opcional)">
-                <button onclick="register()" class="btn-neon w-full"><i class="fas fa-user-plus mr-2"></i>CADASTRAR</button>
-                <button onclick="closeRegister()" class="text-gray-400 hover:text-white text-sm">Já tem conta? Entrar</button>
+                <div class="grid grid-cols-2 gap-4">
+                    <div onclick="selectRegisterType('user')" id="reg-type-user" class="glass-card rounded-xl p-6 text-center cursor-pointer border-2 border-transparent hover:border-cyan-400 transition-all">
+                        <i class="fas fa-user text-4xl text-cyan-400 mb-3"></i>
+                        <h3 class="font-bold">Usuário</h3>
+                        <p class="text-xs text-gray-400 mt-2">Teste gratuito 24h</p>
+                    </div>
+                    <div onclick="selectRegisterType('reseller')" id="reg-type-reseller" class="glass-card rounded-xl p-6 text-center cursor-pointer border-2 border-transparent hover:border-purple-400 transition-all">
+                        <i class="fas fa-store text-4xl text-purple-400 mb-3"></i>
+                        <h3 class="font-bold">Revendedor</h3>
+                        <p class="text-xs text-gray-400 mt-2">Crie sua rede</p>
+                    </div>
+                </div>
+                <div id="register-form" class="hidden space-y-4">
+                    <input type="text" id="reg-username" class="input-glass" placeholder="Nome de usuário">
+                    <input type="password" id="reg-password" class="input-glass" placeholder="Senha">
+                    <input type="text" id="reg-referrer" class="input-glass" placeholder="Código do Revendedor (opcional)">
+                    <div id="reseller-info" class="hidden glass-card rounded-lg p-4 bg-purple-900/20">
+                        <p class="text-sm text-purple-300"><i class="fas fa-info-circle mr-2"></i>Como revendedor, você pode criar clientes e gerenciar bots para eles.</p>
+                    </div>
+                    <button onclick="register()" class="btn-neon w-full"><i class="fas fa-user-plus mr-2"></i>CADASTRAR</button>
+                </div>
+                <button onclick="closeRegister()" class="text-gray-400 hover:text-white text-sm w-full text-center mt-4">Já tem conta? Entrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Planos (Expirado ou Cadastro) -->
+    <div id="plans-modal" class="modal-overlay" style="z-index:3000">
+        <div class="modal-content" style="max-width:900px;max-height:90vh;overflow-y:auto">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold neon-text mb-2"><i class="fas fa-crown mr-2"></i>Escolha seu Plano</h2>
+                <p class="text-gray-400">Acesse todos os recursos com o melhor plano para você</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="glass-card rounded-2xl p-6 relative" id="plan-free">
+                    <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gray-600 text-white text-xs px-4 py-1 rounded-full">GRÁTIS</div>
+                    <h3 class="text-xl font-bold text-center mb-4">Teste</h3>
+                    <div class="text-center mb-6">
+                        <span class="text-4xl font-bold">R$ 0</span>
+                        <p class="text-gray-400 text-sm">24 horas</p>
+                    </div>
+                    <ul class="space-y-2 text-sm mb-6">
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>1 Bot</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>WhatsApp</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Suporte IA</li>
+                        <li><i class="fas fa-times text-red-400 mr-2"></i>Telegram</li>
+                        <li><i class="fas fa-times text-red-400 mr-2"></i>Grupos</li>
+                    </ul>
+                    <button onclick="selectPlan('free', 1)" class="w-full btn-neon" style="background:linear-gradient(45deg,#666,#888)">Selecionar</button>
+                </div>
+                <div class="glass-card rounded-2xl p-6 relative border-2 border-cyan-400" id="plan-monthly">
+                    <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-cyan-500 text-white text-xs px-4 py-1 rounded-full">POPULAR</div>
+                    <h3 class="text-xl font-bold text-center mb-4">Mensal</h3>
+                    <div class="text-center mb-6">
+                        <span class="text-4xl font-bold text-cyan-400">R$ 30</span>
+                        <p class="text-gray-400 text-sm">por mês</p>
+                    </div>
+                    <ul class="space-y-2 text-sm mb-6">
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>5 Bots</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>WhatsApp + Telegram</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Suporte IA</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Grupos</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Clientes</li>
+                    </ul>
+                    <button onclick="selectPlan('monthly', 30)" class="w-full btn-neon">Selecionar</button>
+                </div>
+                <div class="glass-card rounded-2xl p-6 relative" id="plan-yearly">
+                    <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs px-4 py-1 rounded-full">MELHOR</div>
+                    <h3 class="text-xl font-bold text-center mb-4">Anual</h3>
+                    <div class="text-center mb-6">
+                        <span class="text-4xl font-bold text-yellow-400">R$ 250</span>
+                        <p class="text-gray-400 text-sm">ou R$ 21/mês</p>
+                    </div>
+                    <ul class="space-y-2 text-sm mb-6">
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>10 Bots</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>WhatsApp + Telegram</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Suporte IA</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Grupos</li>
+                        <li><i class="fas fa-check text-green-400 mr-2"></i>Clientes Ilimitados</li>
+                    </ul>
+                    <button onclick="selectPlan('yearly', 365)" class="w-full btn-neon" style="background:linear-gradient(45deg,#b8860b,#daa520)">Selecionar</button>
+                </div>
+            </div>
+            <div class="text-center text-gray-400 text-sm">
+                <p><i class="fas fa-lock mr-2"></i>Pagamento 100% seguro via Pix</p>
             </div>
         </div>
     </div>
@@ -83,14 +170,22 @@
                 <div class="nav-item" onclick="showPage('resellers')" id="nav-resellers" style="display:none"><i class="fas fa-store"></i><span class="nav-text">Revendedores</span></div>
                 <div class="nav-item" onclick="showPage('users')" id="nav-users" style="display:none"><i class="fas fa-user-cog"></i><span class="nav-text">Usuários</span></div>
                 <div class="nav-item" onclick="showPage('settings')"><i class="fas fa-cog"></i><span class="nav-text">Configurações</span></div>
+                <div class="nav-item" onclick="showPage('config')" id="nav-config" style="display:none"><i class="fas fa-shield-alt"></i><span class="nav-text">Admin</span></div>
                 <div class="nav-item" onclick="openSupport()"><i class="fas fa-headset"></i><span class="nav-text">Suporte IA</span></div>
             </nav>
             <div class="mt-auto pt-4 border-t border-gray-700">
                 <div class="flex items-center justify-between p-4 glass rounded-lg mb-4">
-                    <div><p class="text-sm font-bold" id="user-name">Usuário</p><p class="text-xs text-gray-500" id="user-role">Role</p></div>
+                    <div>
+                        <p class="text-sm font-bold" id="user-name">Usuário</p>
+                        <p class="text-xs text-gray-500" id="user-role">Role</p>
+                        <p class="text-xs text-cyan-400 mt-1" id="user-expiry">Carregando...</p>
+                    </div>
                     <div class="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 flex items-center justify-center"><i class="fas fa-user"></i></div>
                 </div>
-                <button onclick="logout()" class="nav-item w-full text-red-400 hover:text-red-300"><i class="fas fa-sign-out-alt"></i><span class="nav-text">Sair</span></button>
+                <div class="flex gap-2">
+                    <button onclick="openCredentialsModal()" class="nav-item flex-1 text-yellow-400 hover:text-yellow-300"><i class="fas fa-key"></i></button>
+                    <button onclick="logout()" class="nav-item flex-1 text-red-400 hover:text-red-300"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
             </div>
         </div>
         <div class="main-content">
@@ -137,33 +232,153 @@
                 <div class="mb-8"><h1 class="text-3xl font-bold neon-text mb-2">Usuários</h1><p class="text-gray-400">Gerencie todos os usuários</p></div>
                 <div id="users-grid" class="bots-grid"></div>
             </div>
+            
+            <!-- Página Configurações (Usuário) -->
             <div id="page-settings" class="page hidden">
                 <div class="mb-8"><h1 class="text-3xl font-bold neon-text mb-2">Configurações</h1><p class="text-gray-400">Personalize seu sistema</p></div>
                 <div class="glass-card rounded-2xl p-6 mb-6">
-                    <h2 class="text-xl font-bold mb-4">Informações do App</h2>
-                    <div class="space-y-4"><div><label class="text-gray-400 text-sm">Nome do App</label><input type="text" id="app-name" class="input-glass" value="ZappBot 3D"></div></div>
-                </div>
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="glass-card rounded-2xl p-6">
-                        <h2 class="text-xl font-bold mb-4">Preços</h2>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div><label class="text-gray-400 text-sm">Mensal (R$)</label><input type="number" id="price-monthly" class="input-glass" value="30"></div>
-                            <div><label class="text-gray-400 text-sm">Trimestral (R$)</label><input type="number" id="price-quarterly" class="input-glass" value="80"></div>
-                            <div><label class="text-gray-400 text-sm">Semestral (R$)</label><input type="number" id="price-semiannual" class="input-glass" value="150"></div>
-                            <div><label class="text-gray-400 text-sm">Anual (R$)</label><input type="number" id="price-yearly" class="input-glass" value="250"></div>
-                        </div>
-                    </div>
-                    <div class="glass-card rounded-2xl p-6">
-                        <h2 class="text-xl font-bold mb-4">Revenda</h2>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div><label class="text-gray-400 text-sm">5 Bots (R$)</label><input type="number" id="price-resell5" class="input-glass" value="100"></div>
-                            <div><label class="text-gray-400 text-sm">10 Bots (R$)</label><input type="number" id="price-resell10" class="input-glass" value="180"></div>
-                            <div><label class="text-gray-400 text-sm">20 Bots (R$)</label><input type="number" id="price-resell20" class="input-glass" value="300"></div>
-                            <div><label class="text-gray-400 text-sm">30 Bots (R$)</label><input type="number" id="price-resell30" class="input-glass" value="400"></div>
-                        </div>
+                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-user mr-2"></i>Dados Pessoais</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label class="text-gray-400 text-sm">Nome de Usuário</label><input type="text" id="cfg-username" class="input-glass" disabled></div>
+                        <div><label class="text-gray-400 text-sm">Email</label><input type="email" id="cfg-email" class="input-glass" placeholder="seu@email.com"></div>
+                        <div><label class="text-gray-400 text-sm">WhatsApp</label><input type="text" id="cfg-whatsapp" class="input-glass" placeholder="55 11 99999-9999"></div>
+                        <div><label class="text-gray-400 text-sm">Telegram</label><input type="text" id="cfg-telegram" class="input-glass" placeholder="@seu_telegram"></div>
                     </div>
                 </div>
-                <div class="mt-6"><button onclick="saveSettings()" class="btn-neon"><i class="fas fa-save mr-2"></i>Salvar Configurações</button></div>
+                <button onclick="saveUserSettings()" class="btn-neon"><i class="fas fa-save mr-2"></i>Salvar</button>
+            </div>
+            
+            <!-- Página Config Admin (apenas Admin) -->
+            <div id="page-config" class="page hidden">
+                <div class="mb-8"><h1 class="text-3xl font-bold neon-text mb-2"><i class="fas fa-cogs mr-2"></i>Painel Admin</h1><p class="text-gray-400">Gerencie todo o sistema</p></div>
+                
+                <!-- Tabs -->
+                <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+                    <button onclick="showConfigTab('general')" class="config-tab btn-neon text-sm px-4 py-2" id="tab-general">Geral</button>
+                    <button onclick="showConfigTab('appearance')" class="config-tab btn-neon text-sm px-4 py-2 bg-gray-600" id="tab-appearance">Aparência</button>
+                    <button onclick="showConfigTab('payment')" class="config-tab btn-neon text-sm px-4 py-2 bg-gray-600" id="tab-payment">Pagamentos</button>
+                    <button onclick="showConfigTab('integrations')" class="config-tab btn-neon text-sm px-4 py-2 bg-gray-600" id="tab-integrations">Integrações</button>
+                    <button onclick="showConfigTab('users')" class="config-tab btn-neon text-sm px-4 py-2 bg-gray-600" id="tab-users">Usuários</button>
+                    <button onclick="showConfigTab('logs')" class="config-tab btn-neon text-sm px-4 py-2 bg-gray-600" id="tab-logs">Logs</button>
+                </div>
+                
+                <!-- Tab Geral -->
+                <div id="cfg-general" class="config-content">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fas fa-info-circle mr-2"></i>Informações do Sistema</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label class="text-gray-400 text-sm">Nome do Painel</label><input type="text" id="cfg-app-name" class="input-glass" placeholder="ZappBot"></div>
+                            <div><label class="text-gray-400 text-sm">URL Pública</label><input type="text" id="cfg-public-url" class="input-glass" placeholder="https://bot.seusite.com"></div>
+                            <div><label class="text-gray-400 text-sm">Email de Contato</label><input type="email" id="cfg-contact-email" class="input-glass" placeholder="contato@seusite.com"></div>
+                            <div><label class="text-gray-400 text-sm">WhatsApp de Suporte</label><input type="text" id="cfg-support-whatsapp" class="input-glass" placeholder="55 11 99999-9999"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Aparência -->
+                <div id="cfg-appearance" class="config-content hidden">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fas fa-palette mr-2"></i>Logo e Cores</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="text-gray-400 text-sm block mb-2">Logo 512x512</label>
+                                <div class="flex items-center gap-4">
+                                    <div id="logo-preview-512" class="w-24 h-24 rounded-lg bg-gray-800 flex items-center justify-center"><i class="fas fa-image text-4xl text-gray-600"></i></div>
+                                    <div class="flex-1">
+                                        <input type="file" id="cfg-logo-512" accept="image/*" class="hidden" onchange="previewLogo(this, 'logo-preview-512')">
+                                        <button onclick="document.getElementById('cfg-logo-512').click()" class="btn-neon text-sm"><i class="fas fa-upload mr-2"></i>Upload</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-gray-400 text-sm block mb-2">Logo 192x192</label>
+                                <div class="flex items-center gap-4">
+                                    <div id="logo-preview-192" class="w-20 h-20 rounded-lg bg-gray-800 flex items-center justify-center"><i class="fas fa-image text-3xl text-gray-600"></i></div>
+                                    <div class="flex-1">
+                                        <input type="file" id="cfg-logo-192" accept="image/*" class="hidden" onchange="previewLogo(this, 'logo-preview-192')">
+                                        <button onclick="document.getElementById('cfg-logo-192').click()" class="btn-neon text-sm"><i class="fas fa-upload mr-2"></i>Upload</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                            <div><label class="text-gray-400 text-sm">Cor Primária</label><input type="color" id="cfg-color-primary" class="input-glass h-12" value="#00f2ff"></div>
+                            <div><label class="text-gray-400 text-sm">Cor Secundária</label><input type="color" id="cfg-color-secondary" class="input-glass h-12" value="#7b2cbf"></div>
+                            <div><label class="text-gray-400 text-sm">Cor de Fundo</label><input type="color" id="cfg-color-bg" class="input-glass h-12" value="#0a0a1a"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Pagamentos -->
+                <div id="cfg-payment" class="config-content hidden">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fab fa-whatsapp mr-2 text-green-400"></i>Mercado Pago</h3>
+                        <div class="space-y-4">
+                            <div><label class="text-gray-400 text-sm">Access Token (Produção)</label><input type="password" id="cfg-mp-token" class="input-glass" placeholder="APP_USR-xxxxxxxxxxxxxxxx"></div>
+                            <div><label class="text-gray-400 text-sm">Webhook Secret</label><input type="password" id="cfg-mp-webhook" class="input-glass" placeholder="Secret do webhook"></div>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fas fa-ticket-alt mr-2 text-yellow-400"></i>Preços dos Planos</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div><label class="text-gray-400 text-sm">Teste Grátis (dias)</label><input type="number" id="cfg-plan-free-days" class="input-glass" value="1" min="0"></div>
+                            <div><label class="text-gray-400 text-sm">Mensal (R$)</label><input type="number" id="cfg-plan-monthly" class="input-glass" value="30" min="0"></div>
+                            <div><label class="text-gray-400 text-sm">Anual (R$)</label><input type="number" id="cfg-plan-yearly" class="input-glass" value="250" min="0"></div>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fas fa-store mr-2 text-purple-400"></i>Preços de Revenda</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div><label class="text-gray-400 text-sm">5 Bots (R$)</label><input type="number" id="cfg-resell-5" class="input-glass" value="100" min="0"></div>
+                            <div><label class="text-gray-400 text-sm">10 Bots (R$)</label><input type="number" id="cfg-resell-10" class="input-glass" value="180" min="0"></div>
+                            <div><label class="text-gray-400 text-sm">20 Bots (R$)</label><input type="number" id="cfg-resell-20" class="input-glass" value="300" min="0"></div>
+                            <div><label class="text-gray-400 text-sm">30 Bots (R$)</label><input type="number" id="cfg-resell-30" class="input-glass" value="400" min="0"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Integrações -->
+                <div id="cfg-integrations" class="config-content hidden">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fas fa-brain mr-2 text-cyan-400"></i>Google Gemini (IA)</h3>
+                        <div>
+                            <label class="text-gray-400 text-sm block mb-2">API Keys (uma por linha)</label>
+                            <textarea id="cfg-gemini-keys" class="input-glass" rows="5" placeholder="AIzaSy....&#10;AIzaSy....&#10;AIzaSy...."></textarea>
+                            <p class="text-xs text-gray-500 mt-2">Você pode adicionar várias chaves para balanceamento de carga.</p>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h3 class="text-lg font-bold mb-4"><i class="fab fa-google mr-2 text-blue-400"></i>Google OAuth (Login)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label class="text-gray-400 text-sm">Client ID</label><input type="text" id="cfg-google-client-id" class="input-glass" placeholder="xxx.apps.googleusercontent.com"></div>
+                            <div><label class="text-gray-400 text-sm">Client Secret</label><input type="password" id="cfg-google-client-secret" class="input-glass"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tab Usuários (Admin Completo) -->
+                <div id="cfg-users" class="config-content hidden">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold"><i class="fas fa-users mr-2 text-cyan-400"></i>Gerenciar Usuários</h3>
+                            <button onclick="loadAllUsers()" class="btn-neon text-sm"><i class="fas fa-sync mr-2"></i>Atualizar</button>
+                        </div>
+                        <div id="all-users-list" class="space-y-3 max-h-96 overflow-y-auto"></div>
+                    </div>
+                </div>
+                
+                <!-- Tab Logs -->
+                <div id="cfg-logs" class="config-content hidden">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold"><i class="fas fa-clipboard-list mr-2 text-yellow-400"></i>Logs de Atividades</h3>
+                            <button onclick="loadCheckinLogs()" class="btn-neon text-sm"><i class="fas fa-sync mr-2"></i>Atualizar</button>
+                        </div>
+                        <div id="checkin-logs" class="font-mono text-sm bg-black/50 rounded-lg p-4 max-h-96 overflow-y-auto"></div>
+                    </div>
+                </div>
+                
+                <div class="mt-6"><button onclick="saveAdminSettings()" class="btn-neon text-lg px-8"><i class="fas fa-save mr-2"></i>Salvar Configurações</button></div>
             </div>
         </div>
     </div>
@@ -184,6 +399,38 @@
             <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold neon-text"><i class="fas fa-robot mr-2"></i>Assistente Gemini</h2><button onclick="closeSupport()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button></div>
             <div id="chat-messages" class="glass rounded-lg p-4 mb-4" style="max-height:400px;overflow-y:auto"><div class="chat-bubble bot mb-4"><p>Olá! Sou o assistente de IA do ZappBot 3D. Como posso ajudar?</p></div></div>
             <div class="flex gap-2"><input type="text" id="chat-input" class="input-glass flex-1" placeholder="Digite sua mensagem..." onkeypress="handleChatKey(event)"><button onclick="sendChatMessage()" class="btn-neon px-4"><i class="fas fa-paper-plane"></i></button></div>
+        </div>
+    </div>
+    
+    <!-- Modal Trocar Credenciais -->
+    <div id="credentials-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold neon-text"><i class="fas fa-key mr-2"></i>Alterar Credenciais</h2><button onclick="closeCredentialsModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button></div>
+            <div class="space-y-4">
+                <div><label class="text-gray-400 text-sm">Senha Atual</label><input type="password" id="cred-current-pass" class="input-glass" placeholder="Senha atual"></div>
+                <div><label class="text-gray-400 text-sm">Novo Nome de Usuário</label><input type="text" id="cred-new-username" class="input-glass" placeholder="Deixe vazio para não alterar"></div>
+                <div><label class="text-gray-400 text-sm">Nova Senha</label><input type="password" id="cred-new-pass" class="input-glass" placeholder="Deixe vazio para não alterar"></div>
+                <button onclick="changeCredentials()" class="btn-neon w-full"><i class="fas fa-save mr-2"></i>Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Gerenciar Usuário (Admin) -->
+    <div id="manage-user-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width:700px">
+            <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold neon-text"><i class="fas fa-user-cog mr-2"></i>Gerenciar Usuário</h2><button onclick="closeManageUserModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button></div>
+            <div id="manage-user-content"></div>
+        </div>
+    </div>
+    
+    <!-- Modal Trocar Senha User -->
+    <div id="change-user-pass-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width:400px">
+            <h2 class="text-xl font-bold neon-text mb-4"><i class="fas fa-key mr-2"></i>Alterar Senha</h2>
+            <div class="space-y-4">
+                <div><label class="text-gray-400 text-sm">Nova Senha</label><input type="password" id="new-user-password" class="input-glass" placeholder="Nova senha"></div>
+                <button onclick="confirmChangeUserPass()" class="btn-neon w-full"><i class="fas fa-save mr-2"></i>Alterar</button>
+            </div>
         </div>
     </div>
     <script>
@@ -230,22 +477,12 @@
             const username=document.getElementById('login-username').value,password=document.getElementById('login-password').value;
             if(!username||!password)return alert('Preencha usuário e senha');
             try{
-                const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+                const res=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
                 const data=await res.json();
-                if(data.success){
-                    const loginRes=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
-                    const loginData=await loginRes.json();
-                    if(loginData.success){currentUser=loginData.user;initApp();}
-                }else{
-                    const loginRes=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
-                    const loginData=await loginRes.json();
-                    if(loginData.success){currentUser=loginData.user;initApp();}
-                    else alert('Usuário ou senha inválidos');
-                }
+                if(data.success){currentUser=data.user;initApp();}
+                else{alert(data.message||'Usuário ou senha inválidos');}
             }catch(e){alert('Erro ao conectar');}
         }
-        
-        function loginWithGoogle(){window.location.href='/auth/google';}
         
         async function checkAuth(){
             try{
@@ -254,35 +491,286 @@
             }catch(e){}
         }
         
-        function showRegister(){document.getElementById('register-modal').style.display='flex';}
+        function logout(){window.location.href='/logout';}
+        
+        let selectedRegisterType='user';
+        function selectRegisterType(type){
+            selectedRegisterType=type;
+            document.getElementById('reg-type-user').classList.remove('border-cyan-400');
+            document.getElementById('reg-type-reseller').classList.remove('border-purple-400');
+            document.getElementById('reg-type-'+type).classList.add('border-'+(type==='user'?'cyan':'purple')+'-400');
+            document.getElementById('register-form').classList.remove('hidden');
+            if(type==='reseller'){
+                document.getElementById('reseller-info').classList.remove('hidden');
+            }else{
+                document.getElementById('reseller-info').classList.add('hidden');
+            }
+        }
+        
+        function showRegister(){
+            document.getElementById('register-modal').style.display='flex';
+            document.getElementById('register-form').classList.add('hidden');
+            document.getElementById('reg-type-user').classList.remove('border-cyan-400');
+            document.getElementById('reg-type-reseller').classList.remove('border-purple-400');
+        }
         function closeRegister(){document.getElementById('register-modal').style.display='none';}
         
         async function register(){
-            const username=document.getElementById('reg-username').value,password=document.getElementById('reg-password').value,referrer=document.getElementById('reg-referrer').value;
+            const username=document.getElementById('reg-username').value;
+            const password=document.getElementById('reg-password').value;
+            const referrer=document.getElementById('reg-referrer').value;
             if(!username||!password)return alert('Preencha todos os campos');
-            const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,referrer})});
-            const data=await res.json();
-            if(data.success){alert('Conta criada! Faça login.');closeRegister();}else alert(data.message);
+            try{
+                const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,referrer,role:selectedRegisterType})});
+                const data=await res.json();
+                if(data.success){
+                    closeRegister();
+                    if(selectedRegisterType==='user'){
+                        showPlansModal();
+                    }else{
+                        alert('Conta criada! Faça login.');
+                    }
+                }else{alert(data.message||'Erro ao criar conta');}
+            }catch(e){alert('Erro de conexão');}
         }
         
-        function logout(){window.location.href='/logout';}
+        function showPlansModal(){
+            document.getElementById('plans-modal').style.display='flex';
+        }
+        function closePlansModal(){document.getElementById('plans-modal').style.display='none';}
+        
+        async function selectPlan(planType, days){
+            try{
+                const res=await fetch('/api/user/activate-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planType,days})});
+                const data=await res.json();
+                if(data.success){
+                    alert('Plano ativado! Você tem '+days+' dias de acesso.');
+                    location.reload();
+                }else{alert(data.message||'Erro ao ativar plano');}
+            }catch(e){alert('Erro de conexão');}
+        }
         
         function initApp(){
+            // Verificar expiração
+            if(currentUser.expiresAt){
+                const expires=new Date(currentUser.expiresAt);
+                const now=new Date();
+                if(expires<now && !currentUser.isAdmin){
+                    document.getElementById('auth-screen').classList.remove('hidden');
+                    document.getElementById('app').classList.add('hidden');
+                    showPlansModal();
+                    return;
+                }
+            }
+            
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app').classList.remove('hidden');
             document.getElementById('user-name').textContent=currentUser.username;
             document.getElementById('user-role').textContent=currentUser.role||'cliente';
+            updateUserExpiry();
             if(currentUser.isAdmin||currentUser.role==='reseller')document.getElementById('nav-resellers').style.display='flex';
-            if(currentUser.isAdmin)document.getElementById('nav-users').style.display='flex';
+            if(currentUser.isAdmin){
+                document.getElementById('nav-users').style.display='flex';
+                document.getElementById('nav-config').style.display='flex';
+                loadUsersDetail();
+            }
             initSocket();updateStats();
         }
+        
+        function updateUserExpiry(){
+            const el=document.getElementById('user-expiry');
+            if(!el)return;
+            if(!currentUser.expiresAt){el.textContent='Sem limite';return;}
+            const expires=new Date(currentUser.expiresAt);
+            const now=new Date();
+            const diff=expires-now;
+            if(diff<0){el.textContent='Expirado';el.classList.add('text-red-400');showPlansModal();return;}
+            const days=Math.ceil(diff/(1000*60*60*24));
+            el.textContent=`${days} dias restantes`;
+            if(days<7)el.classList.add('text-yellow-400');
+            else el.classList.add('text-green-400');
+            el.classList.remove('text-red-400');
+            el.textContent=`${days} dias restantes`;
+            if(days<7)el.classList.add('text-yellow-400');
+            else el.classList.add('text-green-400');
+        }
+        
+        function openCredentialsModal(){
+            document.getElementById('credentials-modal').style.display='flex';
+            document.getElementById('cred-current-pass').value='';
+            document.getElementById('cred-new-username').value='';
+            document.getElementById('cred-new-pass').value='';
+        }
+        
+        function closeCredentialsModal(){document.getElementById('credentials-modal').style.display='none';}
+        
+        async function changeCredentials(){
+            const currentPass=document.getElementById('cred-current-pass').value;
+            const newUsername=document.getElementById('cred-new-username').value;
+            const newPass=document.getElementById('cred-new-pass').value;
+            if(!currentPass)return alert('Digite a senha atual');
+            try{
+                const res=await fetch('/api/user/change-credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:currentPass,newUsername,newPassword:newPass})});
+                const data=await res.json();
+                if(data.success){
+                    alert('Credenciais atualizadas!');
+                    if(newUsername&&newUsername!==currentUser.username){
+                        setTimeout(()=>{window.location.href='/logout';},1000);
+                    }
+                    closeCredentialsModal();
+                }else{alert(data.message||'Erro ao alterar');}
+            }catch(e){alert('Erro de conexão');}
+        }
+        
+        async function loadUsersDetail(){
+            if(!currentUser.isAdmin)return;
+            try{
+                const res=await fetch('/api/admin/users-detail');
+                const users=await res.json();
+                const grid=document.getElementById('users-grid');
+                if(grid){
+                    grid.innerHTML=users.map(u=>{
+                        const expires=new Date(u.expiresAt);
+                        const now=new Date();
+                        const daysLeft=Math.ceil((expires-now)/(1000*60*60*24));
+                        const isExpired=daysLeft<0;
+                        return`<div class="glass-card rounded-2xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-12 h-12 rounded-full bg-gradient-to-r ${u.isAdmin?'from-red-500 to-orange-500':u.role==='reseller'?'from-purple-500 to-pink-500':'from-cyan-500 to-blue-500'} flex items-center justify-center"><i class="fas fa-user"></i></div>
+                                    <div><h3 class="font-bold">${u.username}</h3><p class="text-sm ${u.isAdmin?'text-red-400':u.role==='reseller'?'text-purple-400':'text-gray-400'}">${u.role}</p></div>
+                                </div>
+                                <button onclick="openManageUser('${u.username}')" class="btn-neon text-sm px-4 py-2"><i class="fas fa-cog"></i></button>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div class="glass rounded-lg p-2"><p class="text-xs text-gray-400">Bots</p><p class="font-bold">${u.botsCount}/${u.botLimit}</p></div>
+                                <div class="glass rounded-lg p-2"><p class="text-xs text-gray-400">Dias</p><p class="font-bold ${isExpired?'text-red-400':'text-green-400'}">${isExpired?0:daysLeft}</p></div>
+                                <div class="glass rounded-lg p-2"><p class="text-xs text-gray-400">Criado</p><p class="font-bold text-xs">${new Date(u.createdAt).toLocaleDateString()}</p></div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            }catch(e){console.error('Erro ao carregar usuários:',e);}
+        }
+        
+        let usersDetail={},selectedUserForPass=null;
+        async function openManageUser(username){
+            try{
+                const res=await fetch('/api/admin/users-detail');
+                const users=await res.json();
+                const user=users.find(u=>u.username===username);
+                if(!user)return alert('Usuário não encontrado');
+                usersDetail=user;
+                const modal=document.getElementById('manage-user-modal');
+                const content=document.getElementById('manage-user-content');
+                const expires=new Date(user.expiresAt);
+                const now=new Date();
+                const daysLeft=Math.ceil((expires-now)/(1000*60*60*24));
+                const isExpired=daysLeft<0;
+                content.innerHTML=`<div class="space-y-4">
+                    <div class="glass-card rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-full bg-gradient-to-r ${user.isAdmin?'from-red-500 to-orange-500':user.role==='reseller'?'from-purple-500 to-pink-500':'from-cyan-500 to-blue-500'} flex items-center justify-center text-xl"><i class="fas fa-user"></i></div>
+                                <div><h3 class="font-bold text-lg">${user.username}</h3><span class="text-xs ${user.isAdmin?'text-red-400':user.role==='reseller'?'text-purple-400':'text-gray-400'}">${user.role}${user.isAdmin?' (Admin)':''}</span></div>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${user.isActive?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}">${user.isActive?'Ativo':'Bloqueado'}</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 mb-4">
+                            <div class="glass rounded-lg p-3 text-center"><p class="text-xs text-gray-400">Bots</p><p class="font-bold">${user.botsCount}/${user.botLimit}</p></div>
+                            <div class="glass rounded-lg p-3 text-center"><p class="text-xs text-gray-400">Dias</p><p class="font-bold ${isExpired?'text-red-400':'text-green-400'}">${isExpired?0:daysLeft}</p></div>
+                            <div class="glass rounded-lg p-3 text-center"><p class="text-xs text-gray-400">Criado</p><p class="font-bold text-xs">${new Date(user.createdAt).toLocaleDateString()}</p></div>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-lg p-4">
+                        <h4 class="font-bold mb-3">Editar Usuário</h4>
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="text-gray-400 text-xs">Dias de Acesso</label><input type="number" id="user-days-${username}" class="input-glass" value="${user.trialDays||0}" min="0"></div>
+                            <div><label class="text-gray-400 text-xs">Limite Bots</label><input type="number" id="user-botlimit-${username}" class="input-glass" value="${user.botLimit}" min="1"></div>
+                        </div>
+                        <div class="mb-3"><label class="text-gray-400 text-xs">Função</label><select id="user-role-${username}" class="input-glass"><option value="cliente" ${user.role==='cliente'?'selected':''}>Cliente</option><option value="reseller" ${user.role==='reseller'?'selected':''}>Revendedor</option><option value="admin" ${user.role==='admin'?'selected':''}>Admin</option></select></div>
+                        <div class="flex gap-2">
+                            <button onclick="saveUserSettings('${username}')" class="btn-neon flex-1 text-sm"><i class="fas fa-save mr-1"></i>Salvar</button>
+                            <button onclick="selectedUserForPass='${username}';document.getElementById('change-user-pass-modal').style.display='flex'" class="input-glass px-3" title="Alterar Senha"><i class="fas fa-key"></i></button>
+                            <button onclick="toggleUserStatus('${username}')" class="input-glass px-3 ${user.isActive?'text-red-400':'text-green-400'}" title="${user.isActive?'Bloquear':'Desbloquear'}"><i class="fas ${user.isActive?'fa-ban':'fa-check'}"></i></button>
+                            <button onclick="deleteUser('${username}')" class="input-glass px-3 text-red-400 hover:text-red-300" title="Excluir"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-lg p-4">
+                        <h4 class="font-bold mb-2">Histórico</h4>
+                        <div class="text-sm text-gray-400 max-h-40 overflow-y-auto">
+                            ${(user.checkins||[]).map(c=>`<p class="py-1 border-b border-gray-800"><span class="text-xs text-gray-500">${new Date(c.timestamp).toLocaleString()}</span> - ${c.action}</p>`).join('')||'<p>Nenhum registro</p>'}
+                        </div>
+                    </div>
+                </div>`;
+                modal.style.display='flex';
+            }catch(e){alert('Erro ao carregar dados');}
+        }
+        
+        async function confirmChangeUserPass(){
+            const newPass=document.getElementById('new-user-password').value;
+            if(!newPass||newPass.length<4)return alert('Senha deve ter no mínimo 4 caracteres');
+            try{
+                const res=await fetch('/api/user/change-credentials-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:selectedUserForPass,newPassword:newPass})});
+                const data=await res.json();
+                if(data.success){alert('Senha alterada!');document.getElementById('change-user-pass-modal').style.display='none';document.getElementById('new-user-password').value='';}
+                else alert(data.message||'Erro');
+            }catch(e){alert('Erro de conexão');}
+        }
+        
+        async function toggleUserStatus(username){
+            const action=usersDetail.isActive?'bloquear':'desbloquear';
+            if(!confirm(`Deseja ${action} este usuário?`))return;
+            try{
+                const days=usersDetail.isActive?0:usersDetail.trialDays||30;
+                const res=await fetch('/api/admin/set-user-expiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,days:usersDetail.isActive?0:9999})});
+                if(res.ok){alert(`Usuário ${action === 'bloquear'?'bloqueado':'desbloqueado'}!`);loadAllUsers();closeManageUserModal();}
+            }catch(e){alert('Erro');}
+        }
+        
+        async function deleteUser(username){
+            if(!confirm(`EXCLUIR USUÁRIO "${username}"?\n\nIsso NÃO pode ser desfeito!\nTodos os bots e dados serão perdidos.`))return;
+            if(!confirm('TEM CERTEZA? Digite OK para confirmar.'))return;
+            try{
+                const res=await fetch('/api/admin/delete-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+                const data=await res.json();
+                if(data.success){alert('Usuário excluído!');loadAllUsers();closeManageUserModal();}
+                else alert(data.message||'Erro');
+            }catch(e){alert('Erro de conexão');}
+        }
+        
+        async function saveUserSettings(username){
+            const days=document.getElementById(`user-days-${username}`).value;
+            const botLimit=document.getElementById(`user-botlimit-${username}`).value;
+            const role=document.getElementById(`user-role-${username}`).value;
+            try{
+                await fetch('/api/admin/set-user-expiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,days})});
+                await fetch('/api/admin/set-user-botlimit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,botLimit})});
+                await fetch('/api/admin/set-user-role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,role})});
+                alert('Configurações salvas!');
+                loadAllUsers();
+                closeManageUserModal();
+            }catch(e){alert('Erro ao salvar');}
+        }
+        
+        async function resetUserPassword(username){
+            if(!confirm(`Resetar senha de ${username} para: 123456?`))return;
+            try{
+                const res=await fetch('/api/user/change-credentials-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,newPassword:'123456'})});
+                const data=await res.json();
+                alert(data.success?'Senha resetada para 123456':data.message);
+            }catch(e){alert('Erro ao resetar senha');}
+        }
+        
+        function closeManageUserModal(){document.getElementById('manage-user-modal').style.display='none';}
         
         function showPage(pageId){
             document.querySelectorAll('.page').forEach(p=>p.classList.add('hidden'));
             document.getElementById('page-'+pageId).classList.remove('hidden');
             if(pageId==='bots')renderBots();
             if(pageId==='clients')renderClients();
-            if(pageId==='resellers'||pageId==='users')loadUsers();
+            if(pageId==='resellers')loadUsers();
+            if(pageId==='users'&&currentUser.isAdmin)loadUsersDetail();
         }
         
         function renderBots(){
@@ -410,6 +898,106 @@
             const settings={appName:document.getElementById('app-name').value,priceMonthly:document.getElementById('price-monthly').value,priceQuarterly:document.getElementById('price-quarterly').value,priceSemiannual:document.getElementById('price-semiannual').value,priceYearly:document.getElementById('price-yearly').value,priceResell5:document.getElementById('price-resell5').value,priceResell10:document.getElementById('price-resell10').value,priceResell20:document.getElementById('price-resell20').value,priceResell30:document.getElementById('price-resell30').value};
             await fetch('/api/save-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
             alert('Configurações salvas!');
+        }
+        
+        function showConfigTab(tab){
+            document.querySelectorAll('.config-content').forEach(c=>c.classList.add('hidden'));
+            document.querySelectorAll('.config-tab').forEach(t=>t.classList.add('bg-gray-600'));
+            document.getElementById('cfg-'+tab).classList.remove('hidden');
+            document.getElementById('tab-'+tab).classList.remove('bg-gray-600');
+            if(tab==='users')loadAllUsers();
+            if(tab==='logs')loadCheckinLogs();
+        }
+        
+        async function loadAllUsers(){
+            try{
+                const res=await fetch('/api/admin/users-detail');
+                const users=await res.json();
+                const list=document.getElementById('all-users-list');
+                if(list){
+                    list.innerHTML=users.map(u=>{
+                        const expires=new Date(u.expiresAt);
+                        const now=new Date();
+                        const daysLeft=Math.ceil((expires-now)/(1000*60*60*24));
+                        const isExpired=daysLeft<0;
+                        return`<div class="glass rounded-lg p-4 flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-r ${u.isAdmin?'from-red-500 to-orange-500':u.role==='reseller'?'from-purple-500 to-pink-500':'from-cyan-500 to-blue-500'} flex items-center justify-center text-sm"><i class="fas fa-user"></i></div>
+                                <div>
+                                    <p class="font-bold text-sm">${u.username}</p>
+                                    <p class="text-xs ${u.isAdmin?'text-red-400':u.role==='reseller'?'text-purple-400':'text-gray-400'}">${u.role}${u.isAdmin?' (Admin)':''}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="text-right">
+                                    <p class="text-xs ${isExpired?'text-red-400':'text-green-400'}">${isExpired?'Expirado':daysLeft+' dias'}</p>
+                                    <p class="text-xs text-gray-500">${u.botsCount}/${u.botLimit} bots</p>
+                                </div>
+                                <button onclick="openManageUser('${u.username}')" class="btn-neon text-xs px-3 py-2"><i class="fas fa-cog"></i></button>
+                            </div>
+                        </div>`;
+                    }).join('')||'<p class="text-gray-500 text-center py-4">Nenhum usuário encontrado</p>';
+                }
+            }catch(e){console.error('Erro ao carregar usuários:',e);}
+        }
+        
+        async function loadCheckinLogs(){
+            try{
+                const res=await fetch('/api/admin/checkin-logs');
+                const logs=await res.json();
+                const container=document.getElementById('checkin-logs');
+                if(container){
+                    container.innerHTML=logs.slice(0,100).map(log=>`<p><span class="text-gray-500">[${new Date(log.timestamp).toLocaleString()}]</span> <span class="text-cyan-400">${log.username}</span>: ${log.action}</p>`).join('')||'<p class="text-gray-500">Nenhum log registrado</p>';
+                }
+            }catch(e){console.error('Erro ao carregar logs:',e);}
+        }
+        
+        function previewLogo(input, previewId){
+            if(input.files&&input.files[0]){
+                const reader=new FileReader();
+                reader.onload=function(e){
+                    document.getElementById(previewId).innerHTML=`<img src="${e.target.result}" class="w-full h-full object-contain rounded-lg">`;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        
+        async function saveAdminSettings(){
+            const settings={
+                appName:document.getElementById('cfg-app-name')?.value,
+                publicUrl:document.getElementById('cfg-public-url')?.value,
+                contactEmail:document.getElementById('cfg-contact-email')?.value,
+                supportWhatsapp:document.getElementById('cfg-support-whatsapp')?.value,
+                colorPrimary:document.getElementById('cfg-color-primary')?.value,
+                colorSecondary:document.getElementById('cfg-color-secondary')?.value,
+                colorBg:document.getElementById('cfg-color-bg')?.value,
+                planFreeDays:document.getElementById('cfg-plan-free-days')?.value,
+                priceMonthly:document.getElementById('cfg-plan-monthly')?.value,
+                priceYearly:document.getElementById('cfg-plan-yearly')?.value,
+                priceResell5:document.getElementById('cfg-resell-5')?.value,
+                priceResell10:document.getElementById('cfg-resell-10')?.value,
+                priceResell20:document.getElementById('cfg-resell-20')?.value,
+                priceResell30:document.getElementById('cfg-resell-30')?.value
+            };
+            
+            const logo512=document.getElementById('cfg-logo-512')?.files[0];
+            const logo192=document.getElementById('cfg-logo-192')?.files[0];
+            
+            try{
+                const formData=new FormData();
+                Object.keys(settings).forEach(key=>formData.append(key,settings[key]));
+                if(logo512)formData.append('icon512',logo512);
+                if(logo192)formData.append('icon192',logo192);
+                
+                const res=await fetch('/api/admin/save-settings-full',{method:'POST',body:formData});
+                const data=await res.json();
+                if(data.success){
+                    alert('Configurações salvas com sucesso!');
+                    location.reload();
+                }else{
+                    alert(data.message||'Erro ao salvar');
+                }
+            }catch(e){alert('Erro de conexão: '+e.message);}
         }
         
         document.addEventListener('DOMContentLoaded',()=>{init3DBackground();checkAuth();});
