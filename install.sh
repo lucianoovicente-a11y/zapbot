@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # =============================================================================
-# ZAPPBOT - INSTALADOR COMPLETO PARA VPS (Ubuntu/Debian)
-# Autor: ZappBot
-# Versão: 1.0.0
+# ZAPPBOT - INSTALADOR COMPLETO AUTOMÁTICO
+# Execute: sudo bash install.sh
 # =============================================================================
 
 set -e
@@ -16,159 +15,99 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-print_banner() {
-    echo -e "${CYAN}"
-    echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║              ZAPPBOT - INSTALADOR COMPLETO VPS               ║"
-    echo "║     Bot WhatsApp/Telegram + IA + Painel de Gestão           ║"
-    echo "╚═══════════════════════════════════════════════════════════════╝"
-    echo -e "${NC}"
-}
-
-print_step() { echo -e "${BLUE}[►]${NC} $1"; }
-print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
-print_error() { echo -e "${RED}[✗]${NC} $1"; }
+# Banner
+echo -e "${CYAN}"
+echo "╔═══════════════════════════════════════════════════════════════╗"
+echo "║          ZAPPBOT 3D - INSTALADOR AUTOMÁTICO                 ║"
+echo "║     Bot WhatsApp/Telegram + IA + Painel de Gestão           ║"
+echo "╚═══════════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
 
 # Verificar root
 if [ "$EUID" -ne 0 ]; then
-    print_error "Execute este script como ROOT (sudo bash install.sh)"
+    echo -e "${RED}[✗] Execute como root: sudo bash install.sh${NC}"
     exit 1
 fi
 
-print_banner
+echo -e "${BLUE}[►] Iniciando instalação automática...${NC}"
 
 # =============================================================================
-# 1. DETECTAR VERSÃO DO SISTEMA
+# 1. LIMPEZA E CONFIGURAÇÃO INICIAL
 # =============================================================================
-print_step "Detectando sistema operacional..."
+echo -e "${BLUE}[1/6] Preparando sistema...${NC}"
 
-# Detectar versão do Ubuntu
-if [ -f /etc/lsb-release ]; then
-    OS_VERSION=$(lsb_release -rs 2>/dev/null)
-    OS_CODENAME=$(lsb_release -cs 2>/dev/null)
-else
-    OS_VERSION=$(cat /etc/os-release | grep VERSION_ID | cut -d'"' -f2 | head -1)
-    OS_CODENAME=$(cat /etc/os-release | grep VERSION_CODENAME | cut -d'"' -f2 | head -1)
-fi
-print_warning "Versão do sistema: $OS_VERSION ($OS_CODENAME)"
+# Remover repositórios quebrados
+rm -f /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true
+rm -rf /var/lib/apt/lists/nodesource* 2>/dev/null || true
+rm -f /usr/share/keyrings/nodesource.gpg 2>/dev/null || true
 
-# =============================================================================
-# 2. ATUALIZAR SISTEMA
-# =============================================================================
-print_step "Atualizando sistema..."
+# Atualizar apt
 export DEBIAN_FRONTEND=noninteractive
-apt update -y && apt upgrade -y
-print_success "Sistema atualizado"
+apt update -qq
+
+echo -e "${GREEN}[✓] Sistema preparado${NC}"
 
 # =============================================================================
-# 3. INSTALAR NODE.JS - COMPATIBILIDADE COM UBUNTU 18.04
+# 2. INSTALAR NODE.JS 14
 # =============================================================================
-print_step "Instalando Node.js..."
+echo -e "${BLUE}[2/6] Instalando Node.js 14...${NC}"
 
-# Detectar libc6
-LIBC_VERSION=$(ldd --version 2>/dev/null | head -1 | awk '{print $NF}')
-print_warning "Versão do libc6: $LIBC_VERSION"
-
-# Se Ubuntu 18.04 (bionic) ou libc6 < 2.28, usar Node 14
-if [ "$OS_CODENAME" = "bionic" ] || [[ "$LIBC_VERSION" < "2.28" ]]; then
-    print_warning "Sistema legado detectado (Ubuntu 18.04). Instalando Node.js 14.x via binário..."
-    
-    # Remover nodesource existente
-    rm -f /etc/apt/sources.list.d/nodesource.list
-    rm -rf /var/lib/apt/lists/nodesource*
-    
-    # Baixar e instalar Node.js 14 diretamente (sem nodesource)
+# Verificar se já tem Node.js
+if command -v node &> /dev/null; then
+    NODE_VER=$(node -v)
+    echo -e "${YELLOW}[!] Node.js já instalado: $NODE_VER${NC}"
+else
+    # Baixar e instalar Node.js 14 via binário
     cd /tmp
+    
+    echo -e "${YELLOW}   Baixando Node.js...${NC}"
     wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
+    
+    echo -e "${YELLOW}   Instalando Node.js...${NC}"
     tar -xJf node-v14.21.3-linux-x64.tar.xz
     cp -r node-v14.21.3-linux-x64/* /usr/local/
+    
+    # Symlinks
     ln -sf /usr/local/bin/node /usr/bin/node
     ln -sf /usr/local/bin/npm /usr/bin/npm
     ln -sf /usr/local/bin/npx /usr/bin/npx
+    
+    # Limpar
     rm -rf node-v14.21.3-linux-x64*
-else
-    # Ubuntu 20.04+ pode usar Node 18+
-    if command -v node &> /dev/null; then
-        print_warning "Node.js já instalado: $(node -v)"
-    else
-        # Tentar instalar via nodesource
-        if ! curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null; then
-            print_warning "Tentando Node.js 18.x..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || {
-                # Fallback: baixar binário
-                print_warning "Baixando Node.js 18 diretamente..."
-                cd /tmp
-                wget -q https://nodejs.org/dist/v18.20.0/node-v18.20.0-linux-x64.tar.xz
-                tar -xJf node-v18.20.0-linux-x64.tar.xz
-                cp -r node-v18.20.0-linux-x64/* /usr/local/
-                ln -sf /usr/local/bin/node /usr/bin/node
-                ln -sf /usr/local/bin/npm /usr/bin/npm
-                ln -sf /usr/local/bin/npx /usr/bin/npx
-                rm -rf node-v18.20.0-linux-x64*
-            }
-        fi
-        apt-get install -y nodejs 2>/dev/null || true
-    fi
 fi
 
-print_success "Node.js instalado: $(node -v)"
-print_success "NPM instalado: $(npm -v)"
+echo -e "${GREEN}[✓] Node.js: $(node -v)${NC}"
+echo -e "${GREEN}[✓] NPM: $(npm -v)${NC}"
 
 # =============================================================================
-# 3. INSTALAR NGINX
+# 3. INSTALAR DEPENDÊNCIAS DO SISTEMA
 # =============================================================================
-print_step "Instalando Nginx..."
+echo -e "${BLUE}[3/6] Instalando dependências do sistema...${NC}"
 
-if command -v nginx &> /dev/null; then
-    print_warning "Nginx já instalado"
-else
-    apt install -y nginx
-fi
+apt install -y -qq curl wget git unzip build-essential ca-certificates gnupg lsb-release sudo
 
-print_success "Nginx instalado: $(nginx -v 2>&1 | cut -d' ' -f3)"
+echo -e "${GREEN}[✓] Dependências instaladas${NC}"
 
 # =============================================================================
-# 4. INSTALAR FERRAMENTAS UTILITÁRIAS
+# 4. CONFIGURAR PROJETO
 # =============================================================================
-print_step "Instalando ferramentas..."
+echo -e "${BLUE}[4/6] Configurando ZappBot...${NC}"
 
-apt install -y curl wget git unzip zip build-essential \
-    software-properties-common ca-certificates gnupg lsb-release \
-    redis-server ufw fail2ban htop
-
-print_success "Ferramentas instaladas"
-
-# =============================================================================
-# 5. INSTALAR PM2 (Gerenciador de Processos)
-# =============================================================================
-print_step "Instalando PM2..."
-npm install -g pm2
-# pm2-logrotate não é mais necessário no PM2 mais recente
-# O PM2 já tem log management integrado
-print_success "PM2 instalado"
-
-# =============================================================================
-# 6. CRIAR DIRETÓRIO DO PROJETO
-# =============================================================================
-print_step "Configurando diretórios..."
-
+# Criar diretório
 PROJECT_DIR="/var/www/zappbot"
 mkdir -p "$PROJECT_DIR"
 
-# Definir diretório atual como local do projeto
+# Copiar arquivos do diretório atual ou criar estrutura básica
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ "$SCRIPT_DIR" != "$PROJECT_DIR" ]; then
+
+if [ -f "$SCRIPT_DIR/server.js" ]; then
+    echo -e "${YELLOW}   Copiando arquivos...${NC}"
     cp -r "$SCRIPT_DIR"/* "$PROJECT_DIR/" 2>/dev/null || true
+else
+    echo -e "${YELLOW}   Criando estrutura básica...${NC}"
 fi
 
 cd "$PROJECT_DIR"
-print_success "Diretório configurado: $PROJECT_DIR"
-
-# =============================================================================
-# 7. INSTALAR DEPENDÊNCIAS NPM
-# =============================================================================
-print_step "Instalando dependências do projeto..."
 
 # Criar package.json se não existir
 if [ ! -f "package.json" ]; then
@@ -210,218 +149,115 @@ if [ ! -f "package.json" ]; then
 PKGJSON
 fi
 
-npm install --legacy-peer-deps
-print_success "Dependências instaladas"
-
-# =============================================================================
-# 8. CRIAR ARQUIVO .ENV
-# =============================================================================
-print_step "Criando arquivo de configuração..."
-
+# Criar .env se não existir
 if [ ! -f ".env" ]; then
-    cat > .env << 'ENVFILE'
+    DOMAIN=$(hostname -I | awk '{print $1}')
+    cat > .env << ENVFILE
 # ==========================================
-# CONFIGURAÇÕES DO ZAPPBOT
+# ZAPPBOT 3D - CONFIGURAÇÕES
 # ==========================================
 
-# Sessão
-SESSION_SECRET=zappbot_session_secret_change_me
+# Sessão e Segurança
+SESSION_SECRET=zappbot_session_$(date +%s)
+PUBLIC_URL=http://$DOMAIN:3000
+SOCKET_URL=http://$DOMAIN:3000
+PORT=3000
+NODE_ENV=production
 
-# URLs
-PUBLIC_URL=http://localhost:3000
-GOOGLE_CALLBACK_URL=/auth/google/callback
-
-# Google OAuth (opcional)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-
-# API Gemini (OBRIGATÓRIO para IA)
-# Coloque suas chaves separadas por linha
-API_KEYS_GEMINI=sua_chave_aqui
+# API Gemini (OBRIGATÓRIO)
+API_KEYS_GEMINI=SUA_CHAVE_AQUI
 
 # Mercado Pago (opcional)
 MP_ACCESS_TOKEN=
-MP_WEBHOOK_SECRET=
 
 # Configurações do Bot
 DEFAULT_TRIAL_DAYS=3
 ENVFILE
-    print_warning "Arquivo .env criado - configure suas chaves!"
+    echo -e "${YELLOW}[!] ATENÇÃO: Edite o .env e adicione sua API KEY do Gemini!${NC}"
+fi
+
+# Criar diretórios
+mkdir -p auth_sessions uploads backups logs
+
+# =============================================================================
+# 5. INSTALAR DEPENDÊNCIAS NPM
+# =============================================================================
+echo -e "${BLUE}[5/6] Instalando dependências NPM...${NC}"
+
+npm install --legacy-peer-deps 2>&1 | tail -5
+
+echo -e "${GREEN}[✓] Dependências NPM instaladas${NC}"
+
+# =============================================================================
+# 6. INICIAR SERVIÇO
+# =============================================================================
+echo -e "${BLUE}[6/6] Iniciando ZappBot...${NC}"
+
+# Parar processos antigos
+pkill -f "node server.js" 2>/dev/null || true
+pkill -f "node index.js" 2>/dev/null || true
+
+# Criar script de inicialização
+cat > /etc/systemd/system/zappbot.service << SYSTEMD
+[Unit]
+Description=ZappBot 3D Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$PROJECT_DIR
+ExecStart=/usr/bin/node $PROJECT_DIR/server.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD
+
+# Ativar e iniciar
+systemctl daemon-reload
+systemctl enable zappbot
+systemctl restart zappbot
+
+# Aguardar iniciar
+sleep 3
+
+# Verificar status
+if systemctl is-active --quiet zappbot; then
+    echo -e "${GREEN}[✓] ZappBot iniciado com sucesso!${NC}"
 else
-    print_warning "Arquivo .env já existe"
+    echo -e "${YELLOW}[!] ZappBot iniciou, verificando logs...${NC}"
+    journalctl -u zappbot -n 10 --no-pager
 fi
 
 # =============================================================================
-# 9. CRIAR PASTAS NECESSÁRIAS
+# RESUMO
 # =============================================================================
-print_step "Criando pastas..."
+IP=$(hostname -I | awk '{print $1}')
 
-mkdir -p auth_sessions
-mkdir -p uploads
-mkdir -p backups
-mkdir -p logs
-
-print_success "Pastas criadas"
-
-# =============================================================================
-# 10. CONFIGURAR NGINX
-# =============================================================================
-print_step "Configurando Nginx..."
-
-# Pegar IP automaticamente
-DOMAIN=$(hostname -I | awk '{print $1}')
-print_warning "Usando IP: $DOMAIN (configure .env para mudar)"
-
-# Backup config padrão
-cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak 2>/dev/null || true
-
-# Criar config do site
-cat > /etc/nginx/sites-available/zappbot << 'NGINXCONF'
-server {
-    listen 80;
-    server_name $DOMAIN;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-        
-        # WebSocket support
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-
-    # Arquivos estáticos
-    location /uploads {
-        alias /var/www/zappbot/uploads;
-        add_header Cache-Control "public, max-age=31536000";
-    }
-
-    #SSL (comente se não tiver certificado)
-    #listen 443 ssl http2;
-    #ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    #ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-}
-NGINXCONF
-
-# Ativar site
-ln -sf /etc/nginx/sites-available/zappbot /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-
-print_success "Nginx configurado para $DOMAIN"
-
-# =============================================================================
-# 11. CONFIGURAR FIREWALL
-# =============================================================================
-print_step "Configurando Firewall..."
-
-#SSH
-read -p "Porta SSH (padrão 22): " SSH_PORT
-SSH_PORT=${SSH_PORT:-22}
-
-ufw --force enable
-ufw allow $SSH_PORT/tcp
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw allow 3000/tcp
-
-print_success "Firewall configurado"
-
-# =============================================================================
-# 12. CONFIGURAR SWAP (se necessário)
-# =============================================================================
-print_step "Verificando memória..."
-
-TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
-if [ "$TOTAL_MEM" -lt 2048 ]; then
-    print_warning "Pouca memória RAM detected. Criando swap..."
-    fallocate -l 2G /swapfile
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-    echo '/swapfile none swap sw 0 0' >> /etc/fstab
-    print_success "Swap criado"
-fi
-
-# =============================================================================
-# 13. INICIAR BOT COM PM2
-# =============================================================================
-print_step "Iniciando ZappBot com PM2..."
-
-cd /var/www/zappbot
-
-# Parar se já estiver rodando
-pm2 delete zappbot 2>/dev/null || true
-
-# Iniciar
-pm2 start server.js --name zappbot --time
-pm2 save
-
-print_success "ZappBot iniciado"
-
-# =============================================================================
-# 14. CONFIGURAR AUTO-INICIO
-# =============================================================================
-print_step "Configurando auto-início..."
-
-pm2 startup | tail -n 1 > /tmp/pm2-startup.sh
-chmod +x /tmp/pm2-startup.sh
-bash /tmp/pm2-startup.sh 2>/dev/null || true
-
-print_success "Auto-início configurado"
-
-# =============================================================================
-# 15. INSTALAR CERTIFICADO SSL (Let's Encrypt)
-# =============================================================================
-print_step "Verificando SSL..."
-
-if [ -n "$INPUT_DOMAIN" ]; then
-    read -p "Deseja instalar SSL gratuito? (s/n): " INSTALL_SSL
-    if [ "$INSTALL_SSL" = "s" ]; then
-        apt install -y certbot python3-certbot-nginx
-        
-        read -p "Seu email para Let's Encrypt: " USER_EMAIL
-        
-        certbot --nginx -d "$DOMAIN" --email "$USER_EMAIL" --agree-tos --non-interactive
-        
-        # Renovar automaticamente
-        crontab -l > /tmp/crontab.bak
-        echo "0 0 * * * certbot renew --quiet" >> /tmp/crontab.bak
-        crontab /tmp/crontab.bak
-        
-        print_success "SSL instalado!"
-    fi
-fi
-
-# =============================================================================
-# RESUMO FINAL
-# =============================================================================
 echo ""
-echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  INSTALAÇÃO CONCLUÍDA COM SUCESSO!${NC}"
-echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "${YELLOW}📋 INFORMAÇÕES:${NC}"
-echo "  • Pasta do projeto: /var/www/zappbot"
-echo "  • URL: http://$DOMAIN"
-echo "  • Painel: http://$DOMAIN"
+echo "   • URL: http://$IP:3000"
+echo "   • Painel: http://$IP:3000"
+echo "   • Usuário: admin"
+echo "   • Senha: admin"
 echo ""
-echo -e "${YELLOW}📝 PRÓXIMOS PASSOS:${NC}"
-echo "  1. Edite o arquivo .env e adicione sua API KEY do Gemini"
-echo "  2. Acesse o painel e crie seu usuário admin"
-echo "  3. Configure o domínio e SSL no arquivo .env"
+echo -e "${RED}⚠️  IMPORTANTE:${NC}"
+echo "   1. Edite o arquivo /var/www/zappbot/.env"
+echo "   2. Adicione sua API KEY do Gemini"
+echo "   3. Reinicie: sudo systemctl restart zappbot"
 echo ""
 echo -e "${YELLOW}📚 COMANDOS ÚTEIS:${NC}"
-echo "  • Ver logs:     pm2 logs zappbot"
-echo "  • Reiniciar:   pm2 restart zappbot"
-echo "  • Parar:        pm2 stop zappbot"
-echo "  • Status:       pm2 status"
+echo "   • Status:     sudo systemctl status zappbot"
+echo "   • Logs:       sudo journalctl -u zappbot -f"
+echo "   • Reiniciar:  sudo systemctl restart zappbot"
+echo "   • Parar:      sudo systemctl stop zappbot"
 echo ""
-echo -e "${CYAN}Obrigado por usar ZappBot! 🚀${NC}"
+echo -e "${CYAN}Obrigado por usar ZappBot 3D! 🚀${NC}"
 echo ""
