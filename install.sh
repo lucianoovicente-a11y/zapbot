@@ -72,30 +72,43 @@ print_warning "Versão do libc6: $LIBC_VERSION"
 
 # Se Ubuntu 18.04 (bionic) ou libc6 < 2.28, usar Node 14
 if [ "$OS_CODENAME" = "bionic" ] || [[ "$LIBC_VERSION" < "2.28" ]]; then
-    print_warning "Sistema legado detectado (Ubuntu 18.04). Usando Node.js 14.x..."
+    print_warning "Sistema legado detectado (Ubuntu 18.04). Instalando Node.js 14.x via binário..."
     
     # Remover nodesource existente
     rm -f /etc/apt/sources.list.d/nodesource.list
     rm -rf /var/lib/apt/lists/nodesource*
     
-    # Instalar Node.js 14.x (último compatível com libc6 2.27)
-    curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
-    apt-get install -y nodejs
+    # Baixar e instalar Node.js 14 diretamente (sem nodesource)
+    cd /tmp
+    wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
+    tar -xJf node-v14.21.3-linux-x64.tar.xz
+    cp -r node-v14.21.3-linux-x64/* /usr/local/
+    ln -sf /usr/local/bin/node /usr/bin/node
+    ln -sf /usr/local/bin/npm /usr/bin/npm
+    ln -sf /usr/local/bin/npx /usr/bin/npx
+    rm -rf node-v14.21.3-linux-x64*
 else
     # Ubuntu 20.04+ pode usar Node 18+
     if command -v node &> /dev/null; then
         print_warning "Node.js já instalado: $(node -v)"
     else
-        # Tentar Node 20, se falhar usar 18
+        # Tentar instalar via nodesource
         if ! curl -fsSL https://deb.nodesource.com/setup_20.x | bash - 2>/dev/null; then
             print_warning "Tentando Node.js 18.x..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+            curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || {
+                # Fallback: baixar binário
+                print_warning "Baixando Node.js 18 diretamente..."
+                cd /tmp
+                wget -q https://nodejs.org/dist/v18.20.0/node-v18.20.0-linux-x64.tar.xz
+                tar -xJf node-v18.20.0-linux-x64.tar.xz
+                cp -r node-v18.20.0-linux-x64/* /usr/local/
+                ln -sf /usr/local/bin/node /usr/bin/node
+                ln -sf /usr/local/bin/npm /usr/bin/npm
+                ln -sf /usr/local/bin/npx /usr/bin/npx
+                rm -rf node-v18.20.0-linux-x64*
+            }
         fi
-        apt-get install -y nodejs || {
-            print_warning "Tentando Node.js 16..."
-            curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
-            apt-get install -y nodejs
-        }
+        apt-get install -y nodejs 2>/dev/null || true
     fi
 fi
 

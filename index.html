@@ -32,7 +32,8 @@
         .status-waiting { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000; }
         #register-modal { z-index: 3000; }
-        .modal-content { background: linear-gradient(135deg, rgba(20,20,40,0.95), rgba(10,10,30,0.95)); border: 1px solid var(--primary); border-radius: 20px; padding: 30px; max-width: 500px; width: 90%; }
+        .modal-content { background: linear-gradient(135deg, rgba(20,20,40,0.95), rgba(10,10,30,0.95)); border: 1px solid var(--primary); border-radius: 20px; padding: 25px; max-width: 500px; width: 90%; }
+        #create-bot-modal .modal-content, #edit-bot-modal .modal-content { max-width: 550px; max-height: 85vh; overflow-y: auto; }
         .bots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
         .terminal { background: #0d0d1a; border: 1px solid rgba(0,242,255,0.3); border-radius: 10px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
         .sidebar { position: fixed; left: 0; top: 0; height: 100%; width: 280px; background: linear-gradient(180deg, rgba(10,10,30,0.95), rgba(5,5,20,0.98)); border-right: 1px solid rgba(255,255,255,0.1); padding: 20px; z-index: 100; overflow-y: auto; }
@@ -383,28 +384,48 @@
         </div>
     </div>
     <div id="create-bot-modal" class="modal-overlay">
-        <div class="modal-content"><h2 class="text-2xl font-bold neon-text mb-6">Criar Novo Bot</h2>
+        <div class="modal-content" style="max-height:90vh;overflow-y:auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold neon-text">Criar Novo Bot</h2>
+                <button onclick="closeCreateBot()" class="text-gray-400 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+            </div>
             <div class="space-y-4">
-                <div><label class="text-gray-400 text-sm">Nome da Sessão (ID)</label><input type="text" id="bot-name" class="input-glass" placeholder="meu_bot"></div>
-                <div><label class="text-gray-400 text-sm">Nome do Bot (para ser chamado)</label><input type="text" id="bot-display-name" class="input-glass" placeholder="Assistente"></div>
-                <div><label class="text-gray-400 text-sm">Prompt de Personalidade (Instruções para IA)</label><textarea id="bot-prompt" class="input-glass" rows="5" placeholder="Você é um assistente virtual amigável e prestativo. Seu nome é Assistente e você ajuda os usuários com suas dúvidas..."></textarea></div>
-                <div><label class="text-gray-400 text-sm">Tipo de Bot</label><select id="bot-type" class="input-glass"><option value="individual">Atendimento Privado</option><option value="group">Gerenciamento de Grupos</option></select></div>
-                <div><label class="text-gray-400 text-sm">Plataforma</label><select id="bot-platform" class="input-glass"><option value="whatsapp">WhatsApp</option><option value="telegram">Telegram</option></select></div>
-                <div id="telegram-token-field" class="hidden"><label class="text-gray-400 text-sm">Token do Bot Telegram</label><input type="text" id="telegram-token" class="input-glass" placeholder="123456:ABC-DEF..."></div>
-                <div><label class="text-gray-400 text-sm">Tempo de Silêncio (minutos entre respostas)</label><input type="number" id="bot-silence" class="input-glass" value="0" min="0" placeholder="0 = sempre responde"></div>
-                <div class="flex gap-4"><button onclick="createBot()" class="btn-neon flex-1">Criar Bot</button><button onclick="closeCreateBot()" class="input-glass px-6">Cancelar</button></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Nome da Sessão (ID)</label><input type="text" id="bot-name" class="input-glass w-full" placeholder="meu_bot"></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Nome do Bot (chamado pelo nome)</label><input type="text" id="bot-display-name" class="input-glass w-full" placeholder="Assistente"></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Prompt de Personalidade</label><textarea id="bot-prompt" class="input-glass w-full" rows="4" placeholder="Você é um assistente virtual..."></textarea></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-gray-400 text-sm block mb-1">Tipo</label>
+                        <select id="bot-type" class="input-glass w-full"><option value="individual">Privado</option><option value="group">Grupos</option></select>
+                    </div>
+                    <div><label class="text-gray-400 text-sm block mb-1">Plataforma</label>
+                        <select id="bot-platform" class="input-glass w-full" onchange="toggleTelegram()"><option value="whatsapp">WhatsApp</option><option value="telegram">Telegram</option></select>
+                    </div>
+                </div>
+                <div id="telegram-token-field" class="hidden"><label class="text-gray-400 text-sm block mb-1">Token Telegram</label><input type="text" id="telegram-token" class="input-glass w-full" placeholder="123456:ABC-..."></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Silêncio (min)</label><input type="number" id="bot-silence" class="input-glass w-full" value="0" min="0"></div>
+                <div class="flex gap-4 pt-2">
+                    <button onclick="createBot()" class="btn-neon flex-1">Criar</button>
+                    <button onclick="closeCreateBot()" class="input-glass px-6">Cancelar</button>
+                </div>
             </div>
         </div>
     </div>
     
     <div id="edit-bot-modal" class="modal-overlay">
-        <div class="modal-content"><h2 class="text-2xl font-bold neon-text mb-6">Editar Bot</h2>
+        <div class="modal-content" style="max-height:90vh;overflow-y:auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold neon-text">Editar Bot</h2>
+                <button onclick="closeEditBot()" class="text-gray-400 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+            </div>
             <div class="space-y-4">
                 <input type="hidden" id="edit-bot-session">
-                <div><label class="text-gray-400 text-sm">Nome do Bot (para ser chamado)</label><input type="text" id="edit-bot-display-name" class="input-glass"></div>
-                <div><label class="text-gray-400 text-sm">Prompt de Personalidade (Instruções para IA)</label><textarea id="edit-bot-prompt" class="input-glass" rows="5"></textarea></div>
-                <div><label class="text-gray-400 text-sm">Tempo de Silêncio (minutos entre respostas)</label><input type="number" id="edit-bot-silence" class="input-glass" min="0"></div>
-                <div class="flex gap-4"><button onclick="saveBotEdits()" class="btn-neon flex-1">Salvar Alterações</button><button onclick="closeEditBot()" class="input-glass px-6">Cancelar</button></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Nome do Bot</label><input type="text" id="edit-bot-display-name" class="input-glass w-full"></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Prompt de Personalidade</label><textarea id="edit-bot-prompt" class="input-glass w-full" rows="4"></textarea></div>
+                <div><label class="text-gray-400 text-sm block mb-1">Silêncio (min)</label><input type="number" id="edit-bot-silence" class="input-glass w-full" min="0"></div>
+                <div class="flex gap-4 pt-2">
+                    <button onclick="saveBotEdits()" class="btn-neon flex-1">Salvar</button>
+                    <button onclick="closeEditBot()" class="input-glass px-6">Cancelar</button>
+                </div>
             </div>
         </div>
     </div>
@@ -901,6 +922,10 @@
         
         function showCreateBot(){document.getElementById('create-bot-modal').style.display='flex';}
         function closeCreateBot(){document.getElementById('create-bot-modal').style.display='none';}
+        function toggleTelegram(){
+            const platform=document.getElementById('bot-platform').value;
+            document.getElementById('telegram-token-field').style.display=platform==='telegram'?'block':'none';
+        }
         
         async function createBot(){
             const name=document.getElementById('bot-name').value;
