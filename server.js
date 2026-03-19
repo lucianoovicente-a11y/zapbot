@@ -695,51 +695,52 @@ app.post('/api/start-bot', (req, res) => {
     botsData[sessionName] = bot;
     bot.activated = true;
     
+    let qrBuffer = '';
+    
     botProcess.stdout.on('data', async (data) => {
-        const output = data.toString();
+        const chunk = data.toString();
+        qrBuffer += chunk;
         
-        if (output.includes('ONLINE')) {
+        // Verificar ONLINE
+        if (chunk.includes('ONLINE')) {
             botsData[sessionName].status = 'Online';
             botsData[sessionName].qr = null;
+            qrBuffer = '';
             io.emit('bots:updated', botsData);
             io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
-        } else if (output.includes('QR_CODE:')) {
-            const parts = output.split('QR_CODE:');
-            if (parts.length > 1) {
-                let qrString = parts[1].trim();
-                qrString = qrString.split(/[\n\r]/)[0].trim();
-                qrString = qrString.replace(/[^A-Za-z0-9+/=]/g, '');
-                
-                console.log(`[QR] QR code detectado para ${sessionName}, tamanho: ${qrString.length} chars`);
-                
-                if (qrString.length > 50) {
-                    try {
-                        const QRCode = require('qrcode');
-                        const qrDataUrl = await QRCode.toDataURL(qrString, { 
-                            width: 300, 
-                            margin: 2,
-                            color: { dark: '#000000', light: '#FFFFFF' }
-                        });
-                        botsData[sessionName].qr = qrDataUrl;
-                        console.log(`[QR] QR code gerado com sucesso!`);
-                    } catch (e) {
-                        console.error(`[QR] Erro ao gerar imagem:`, e.message);
-                        botsData[sessionName].qr = qrString;
-                    }
-                } else {
-                    console.log(`[QR] QR code muito curto, ignorando`);
-                    botsData[sessionName].qr = qrString;
-                }
-            }
-            botsData[sessionName].status = 'Aguardando QR Code';
-            io.emit('bots:updated', botsData);
-        } else if (output.includes('PAIRING_CODE:')) {
-            botsData[sessionName].status = 'Aguardando QR Code';
-            botsData[sessionName].qr = 'PAIRING_CODE:' + output.split('PAIRING_CODE:')[1].trim();
-            io.emit('bots:updated', botsData);
         }
         
-        io.to(`bot-${sessionName}`).emit('bot-log', { sessionName, log: output });
+        // Verificar QR code completo
+        const qrMatch = qrBuffer.match(/QR_CODE:([A-Za-z0-9+/=]+)/);
+        if (qrMatch && qrMatch[1]) {
+            const qrString = qrMatch[1];
+            console.log(`[QR] QR detectado para ${sessionName}, tamanho: ${qrString.length}`);
+            
+            if (qrString.length > 20) {
+                try {
+                    const QRCode = require('qrcode');
+                    const qrDataUrl = await QRCode.toDataURL(qrString, { width: 300, margin: 2 });
+                    botsData[sessionName].qr = qrDataUrl;
+                    botsData[sessionName].status = 'Aguardando QR Code';
+                    console.log(`[QR] QR gerado!`);
+                    io.emit('bots:updated', botsData);
+                } catch (e) {
+                    console.error(`[QR] Erro:`, e.message);
+                }
+            }
+            qrBuffer = '';
+        }
+        
+        // Verificar PAIRING_CODE
+        if (chunk.includes('PAIRING_CODE:')) {
+            botsData[sessionName].status = 'Aguardando QR Code';
+            botsData[sessionName].qr = chunk;
+            io.emit('bots:updated', botsData);
+            qrBuffer = '';
+        }
+        
+        // Enviar log
+        io.to(`bot-${sessionName}`).emit('bot-log', { sessionName, log: chunk });
     });
     
     botProcess.stderr.on('data', (data) => {
@@ -1567,48 +1568,44 @@ io.on('connection', (socket) => {
         });
         
         botProcess.stdout.on('data', async (data) => {
-            const output = data.toString();
-            console.log(`[BOT ${sessionName}] ${output.substring(0, 150)}`);
+            const chunk = data.toString();
             
-            if (output.includes('ONLINE')) {
+            // Verificar ONLINE
+            if (chunk.includes('ONLINE')) {
                 botsData[sessionName].status = 'Online';
                 botsData[sessionName].qr = null;
                 io.emit('bots:updated', botsData);
                 io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
-            } else if (output.includes('QR_CODE:')) {
-                const parts = output.split('QR_CODE:');
-                if (parts.length > 1) {
-                    let qrString = parts[1].trim();
-                    qrString = qrString.split(/[\n\r]/)[0].trim();
-                    qrString = qrString.replace(/[^A-Za-z0-9+/=]/g, '');
-                    
-                    console.log(`[BOT ${sessionName}] QR Code detectado, tamanho: ${qrString.length}`);
-                    
-                    if (qrString.length > 50) {
-                        try {
-                            const QRCode = require('qrcode');
-                            const qrDataUrl = await QRCode.toDataURL(qrString, { 
-                                width: 300, 
-                                margin: 2,
-                                color: { dark: '#000000', light: '#FFFFFF' }
-                            });
-                            botsData[sessionName].qr = qrDataUrl;
-                            console.log(`[BOT ${sessionName}] QR code gerado!`);
-                        } catch (e) {
-                            console.error(`[BOT ${sessionName}] Erro QR:`, e.message);
-                            botsData[sessionName].qr = qrString;
-                        }
+            }
+            
+            // Verificar QR code
+            const qrMatch = chunk.match(/QR_CODE:([A-Za-z0-9+/=]+)/);
+            if (qrMatch && qrMatch[1]) {
+                const qrString = qrMatch[1];
+                console.log(`[BOT ${sessionName}] QR detectado, tamanho: ${qrString.length}`);
+                
+                if (qrString.length > 20) {
+                    try {
+                        const QRCode = require('qrcode');
+                        const qrDataUrl = await QRCode.toDataURL(qrString, { width: 300, margin: 2 });
+                        botsData[sessionName].qr = qrDataUrl;
+                        botsData[sessionName].status = 'Aguardando QR Code';
+                        console.log(`[BOT ${sessionName}] QR gerado!`);
+                        io.emit('bots:updated', botsData);
+                    } catch (e) {
+                        console.error(`[BOT ${sessionName}] Erro QR:`, e.message);
                     }
                 }
+            }
+            
+            // Verificar PAIRING_CODE
+            if (chunk.includes('PAIRING_CODE:')) {
                 botsData[sessionName].status = 'Aguardando QR Code';
-                io.emit('bots:updated', botsData);
-            } else if (output.includes('PAIRING_CODE:')) {
-                botsData[sessionName].status = 'Aguardando QR Code';
-                botsData[sessionName].qr = 'PAIRING_CODE:' + output.split('PAIRING_CODE:')[1].trim();
+                botsData[sessionName].qr = chunk;
                 io.emit('bots:updated', botsData);
             }
             
-            io.to(`bot-${sessionName}`).emit('bot-log', { sessionName, log: output });
+            io.to(`bot-${sessionName}`).emit('bot-log', { sessionName, log: chunk });
         });
         
         botProcess.stderr.on('data', (data) => {
