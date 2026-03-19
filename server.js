@@ -640,6 +640,24 @@ app.post('/api/start-bot', (req, res) => {
     
     if (!bot) return res.json({ success: false, message: 'Bot não encontrado' });
     
+    // Parar processo existente se houver
+    if (bot.processId) {
+        try {
+            process.kill(bot.processId);
+        } catch (e) {}
+    }
+    
+    // Deletar sessão antiga se existir
+    const authPath = path.join(BASE_DIR, 'auth_sessions', `auth_${sessionName}`);
+    if (fs.existsSync(authPath)) {
+        try {
+            fs.rmSync(authPath, { recursive: true, force: true });
+            console.log(`[START BOT] Sessão antiga deletada para ${sessionName}`);
+        } catch (e) {
+            console.error(`[START BOT] Erro ao deletar sessão:`, e.message);
+        }
+    }
+    
     const ignoredJson = JSON.stringify(bot.ignoredIdentifiers || []);
     const promptBase64 = Buffer.from(bot.prompt || '').toString('base64');
     const groupsJson = JSON.stringify([]);
@@ -672,6 +690,8 @@ app.post('/api/start-bot', (req, res) => {
     
     bot.processId = botProcess.pid;
     bot.status = 'Iniciando...';
+    bot.qr = null;
+    botsData[sessionName] = bot;
     bot.activated = true;
     
     botProcess.stdout.on('data', async (data) => {
@@ -1446,6 +1466,22 @@ io.on('connection', (socket) => {
         if (!bot) {
             console.error(`[BOT ${sessionName}] Não encontrado`);
             return;
+        }
+        
+        // Parar processo existente
+        if (bot.processId) {
+            try { process.kill(bot.processId); } catch (e) {}
+        }
+        
+        // Deletar sessão antiga
+        const authPath = path.join(BASE_DIR, 'auth_sessions', `auth_${sessionName}`);
+        if (fs.existsSync(authPath)) {
+            try {
+                fs.rmSync(authPath, { recursive: true, force: true });
+                console.log(`[BOT ${sessionName}] Sessão antiga deletada`);
+            } catch (e) {
+                console.error(`[BOT ${sessionName}] Erro ao deletar sessão:`, e.message);
+            }
         }
         
         const ignoredJson = JSON.stringify(bot.ignoredIdentifiers || []);

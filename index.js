@@ -710,27 +710,33 @@ if (platform === 'telegram') {
     // =================================================================================
     async function ligarBot() {
         console.log(`🚀 Iniciando ${nomeSessao} (WhatsApp)...`);
+        
+        const fs = require('fs');
         const authPath = `./auth_sessions/auth_${nomeSessao}`;
-        const { state, saveCreds } = await useMultiFileAuthState(authPath);
-        const { version } = await fetchLatestBaileysVersion();
+        
+        // Verificar se existe sessão antiga
+        if (fs.existsSync(authPath)) {
+            console.log(`[${nomeSessao}] Sessão anterior detectada em ${authPath}`);
+        }
+        
+        const { state, saveCreds, clearState } = await useMultiFileAuthState(authPath);
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`[${nomeSessao}] Usando Baileys v${version.join('.')}, ${isLatest ? 'última' : 'não última'} versão`);
 
         const sock = makeWASocket({
             version, 
             logger, 
-            auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
+            auth: state,
             syncFullHistory: false, 
             markOnlineOnConnect: true,
-            generateHighQualityLinkPreview: true, 
             browser: ["Ubuntu", "Chrome", "20.0.04"],
             msgRetryCounterCache,
             connectTimeoutMs: 60000,
-            keepAliveIntervalMs: 10000,
-            retryRequestDelayMs: 250,
-            emitOwnEvents: true,
-            fireInitQueries: false
+            keepAliveIntervalMs: 30000,
+            retryRequestDelayMs: 5000,
         });
 
-        currentSock = sock; // Atualiza a referência global
+        currentSock = sock;
 
         if (phoneNumberArg && !sock.authState.creds.registered) {
             setTimeout(async () => {
@@ -741,25 +747,45 @@ if (platform === 'telegram') {
             }, 4000);
         }
 
-        sock.ev.on('connection.update', (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
-            if (qr && !phoneNumberArg) console.log(`QR_CODE:${qr}`);
+            
+            if (qr && !phoneNumberArg) {
+                console.log(`QR_CODE:${qr}`);
+            }
+            
             if (connection === 'close') {
                 currentSock = null;
-                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                if (lastDisconnect?.error?.toString()?.includes('Bad MAC')) {
-                    console.log(`[${nomeSessao}] ⚠️ Erro crítico de sessão (Bad MAC). Tentando reconectar...`);
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                console.log(`[${nomeSessao}] Conexão fechada. Código: ${statusCode}`);
+                console.log(`[${nomeSessao}] Razão: ${lastDisconnect?.error?.message || 'Desconhecida'}`);
+                
+                // Verificar tipo de desconexão
+                if (statusCode === DisconnectReason.loggedOut) {
+                    console.log(`[${nomeSessao}] ❌ Sessão invalidada. Deletando sessão e reiniciando...`);
+                    await clearState();
+                    setTimeout(ligarBot, 3000);
+                } else if (statusCode === DisconnectReason.badSession) {
+                    console.log(`[${nomeSessao}] ❌ Sessão corrompida. Deletando e reiniciando...`);
+                    await clearState();
+                    setTimeout(ligarBot, 3000);
+                } else if (statusCode === DisconnectReason.restartRequired) {
+                    console.log(`[${nomeSessao}] Reinício necessário...`);
+                    setTimeout(ligarBot, 3000);
+                } else {
+                    console.log(`[${nomeSessao}] Tentando reconectar em 5 segundos...`);
+                    setTimeout(ligarBot, 5000);
                 }
-                if (shouldReconnect) setTimeout(ligarBot, 5000);
-                else process.exit(0);
             }
+            
             if (connection === 'open') {
-                console.log('\nONLINE!'); 
+                console.log('\n✅ ONLINE! Bot conectado ao WhatsApp!'); 
                 socket.emit('bot-online', { sessionName: nomeSessao });
                 try {
                     const user = sock.user;
                     if (user) {
                         const name = user.name || user.id.split(':')[0];
+                        console.log(`[${nomeSessao}] Bot identificado como: ${name}`);
                         socket.emit('bot-identified', { sessionName: nomeSessao, publicName: name });
                     }
                 } catch (e) {
