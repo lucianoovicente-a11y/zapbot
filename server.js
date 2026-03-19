@@ -22,6 +22,8 @@ require('dotenv').config();
 
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai'); 
 
+const PORT = process.env.PORT || 3000;
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -642,6 +644,8 @@ app.post('/api/start-bot', (req, res) => {
     const promptBase64 = Buffer.from(bot.prompt || '').toString('base64');
     const groupsJson = JSON.stringify([]);
     
+    const SOCKET_URL = process.env.SOCKET_URL || `http://localhost:${PORT}`;
+    
     const args = [
         BOT_SCRIPT_PATH,
         sessionName,
@@ -660,23 +664,40 @@ app.post('/api/start-bot', (req, res) => {
     const botProcess = spawn('node', args, {
         cwd: BASE_DIR,
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, SOCKET_URL }
     });
+    
+    console.log(`[START BOT] ${sessionName} - Socket URL: ${SOCKET_URL}`);
     
     bot.processId = botProcess.pid;
     bot.status = 'Iniciando...';
     bot.activated = true;
     
-    botProcess.stdout.on('data', (data) => {
+    botProcess.stdout.on('data', async (data) => {
         const output = data.toString();
         if (output.includes('ONLINE')) {
             botsData[sessionName].status = 'Online';
+            botsData[sessionName].qr = null;
+            io.emit('bots:updated', botsData);
+            io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
         } else if (output.includes('QR_CODE:')) {
+            const qrString = output.split('QR_CODE:')[1].split('\n')[0].trim();
+            console.log(`[QR] Gerando QR code para ${sessionName}...`);
+            try {
+                const QRCode = require('qrcode');
+                const qrDataUrl = await QRCode.toDataURL(qrString, { width: 300, margin: 2 });
+                botsData[sessionName].qr = qrDataUrl;
+            } catch (e) {
+                console.error(`[QR] Erro ao gerar imagem:`, e.message);
+                botsData[sessionName].qr = qrString;
+            }
             botsData[sessionName].status = 'Aguardando QR Code';
-            botsData[sessionName].qr = output.split('QR_CODE:')[1].trim();
+            io.emit('bots:updated', botsData);
         } else if (output.includes('PAIRING_CODE:')) {
             botsData[sessionName].status = 'Aguardando QR Code';
             botsData[sessionName].qr = 'PAIRING_CODE:' + output.split('PAIRING_CODE:')[1].trim();
+            io.emit('bots:updated', botsData);
         }
         
         io.to(`bot-${sessionName}`).emit('bot-log', { sessionName, log: output });
@@ -1422,11 +1443,15 @@ io.on('connection', (socket) => {
         const { sessionName, phoneNumber } = data;
         const bot = botsData[sessionName];
         
-        if (!bot) return;
+        if (!bot) {
+            console.error(`[BOT ${sessionName}] Não encontrado`);
+            return;
+        }
         
         const ignoredJson = JSON.stringify(bot.ignoredIdentifiers || []);
         const promptBase64 = Buffer.from(bot.prompt || '').toString('base64');
         const groupsJson = JSON.stringify([]);
+        const SOCKET_URL = process.env.SOCKET_URL || `http://localhost:${PORT}`;
         
         const args = [
             BOT_SCRIPT_PATH,
@@ -1443,30 +1468,53 @@ io.on('connection', (socket) => {
             bot.notificationNumber || ''
         ];
         
-        console.log(`[BOT ${sessionName}] Iniciando processo com args:`, args);
+        console.log(`[BOT ${sessionName}] Iniciando - Socket: ${SOCKET_URL}`);
         
         const botProcess = spawn('node', args, {
             cwd: BASE_DIR,
             detached: true,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env, SOCKET_URL }
         });
         
-        console.log(`[BOT ${sessionName}] Processo iniciado com PID: ${botProcess.pid}`);
+        console.log(`[BOT ${sessionName}] PID: ${botProcess.pid}`);
         
         bot.processId = botProcess.pid;
         bot.status = 'Iniciando...';
         bot.activated = true;
+        botsData[sessionName] = bot;
+        io.emit('bots:updated', botsData);
         
         botProcess.on('error', (err) => {
-            console.error(`[BOT ${sessionName}] Erro ao iniciar processo:`, err.message);
+            console.error(`[BOT ${sessionName}] Erro ao iniciar:`, err.message);
         });
         
         botProcess.stdout.on('data', async (data) => {
             const output = data.toString();
-            console.log(`[BOT ${sessionName}] stdout: ${output.substring(0, 100)}`);
+            console.log(`[BOT ${sessionName}] ${output.substring(0, 150)}`);
+            
             if (output.includes('ONLINE')) {
                 botsData[sessionName].status = 'Online';
                 botsData[sessionName].qr = null;
+                io.emit('bots:updated', botsData);
+                io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
+            } else if (output.includes('QR_CODE:')) {
+                const qrString = output.split('QR_CODE:')[1].split('\n')[0].trim();
+                console.log(`[BOT ${sessionName}] QR Code detectado!`);
+                try {
+                    const QRCode = require('qrcode');
+                    const qrDataUrl = await QRCode.toDataURL(qrString, { width: 300, margin: 2 });
+                    botsData[sessionName].qr = qrDataUrl;
+                } catch (e) {
+                    console.error(`[BOT ${sessionName}] Erro QR:`, e.message);
+                    botsData[sessionName].qr = qrString;
+                }
+                botsData[sessionName].status = 'Aguardando QR Code';
+                io.emit('bots:updated', botsData);
+                console.log(`[BOT ${sessionName}] Emitido bots:updated com QR`);
+            } else if (output.includes('PAIRING_CODE:')) {
+                botsData[sessionName].status = 'Aguardando QR Code';
+                botsData[sessionName].qr = 'PAIRING_CODE:' + output.split('PAIRING_CODE:')[1].trim();
                 io.emit('bots:updated', botsData);
                 io.to(`bot-${sessionName}`).emit('bot-online', { sessionName });
             } else if (output.includes('QR_CODE:')) {
@@ -1659,13 +1707,13 @@ io.on('connection', (socket) => {
 // =============================================================================
 // INICIAR SERVIDOR
 // =============================================================================
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║            ZAPPBOT 3D - SERVIDOR INICIADO                  ║
 ╠═══════════════════════════════════════════════════════════╣
-║  URL: http://localhost:${PORT}                               ║
+║  URL: ${PUBLIC_URL || `http://localhost:${PORT}`}                       ║
+║  SOCKET: ${process.env.SOCKET_URL || `http://localhost:${PORT}`}    ║
 ║  Usuários: ${Object.keys(usersData).length}                                      ║
 ║  Bots: ${Object.keys(botsData).length}                                        ║
 ║  API Keys Gemini: ${API_KEYS_GEMINI.length}                                   ║

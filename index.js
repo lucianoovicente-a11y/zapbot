@@ -70,7 +70,9 @@ const modeloGemini = 'gemini-flash-latest';
 // CONEXÃO SOCKET.IO
 // =================================================================================
 
-const socket = io('http://localhost:3000');
+const SOCKET_URL = process.env.SOCKET_URL || 'http://localhost:3000';
+console.log(`[${nomeSessao}] Conectando ao servidor: ${SOCKET_URL}`);
+const socket = io(SOCKET_URL);
 let currentSock = null; // Referência global para o socket do WhatsApp
 
 socket.on('connect', () => {
@@ -78,6 +80,9 @@ socket.on('connect', () => {
 });
 socket.on('disconnect', () => {
     console.log(`[${nomeSessao}] Desconectado do servidor.`);
+});
+socket.on('connect_error', (err) => {
+    console.error(`[${nomeSessao}] Erro de conexão Socket.IO:`, err.message);
 });
 
 // --- LISTENERS GLOBAIS ---
@@ -265,6 +270,11 @@ function switchToNextApiKey() {
 async function processarComGemini(jid, input, isAudio = false, promptEspecifico = null) {
     console.log(`[DEBUG IA] Iniciando processamento para ${jid}. Input: "${input.substring(0, 20)}..."`);
     
+    if (isAudio) {
+        console.log(`[DEBUG IA] Audio detectado - não suportado, enviando mensagem padrão`);
+        return "Desculpe, no momento não consigo processar mensagens de áudio. Por favor, envie sua mensagem em texto.";
+    }
+    
     for (let attempt = 0; attempt < API_KEYS.length; attempt++) {
         try {
             if (!historicoConversa[jid]) historicoConversa[jid] = [];
@@ -279,23 +289,14 @@ async function processarComGemini(jid, input, isAudio = false, promptEspecifico 
 
             let resposta = "";
             
-            if (isAudio) {
-                const parts = [{ inlineData: { mimeType: "audio/ogg", data: input } }, { text: "Responda a este áudio." }];
-                const result = await model.generateContent({
-                    contents: [{ role: "user", parts: [{ text: `System: ${promptFinal}` }] }, { role: "user", parts: parts }]
-                });
-                resposta = result.response.text().trim();
-                historicoConversa[jid].push({ role: "user", parts: [{ text: "[Áudio]" }] });
-            } else {
-                const chat = model.startChat({ history: chatHistory });
-                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout Gemini")), 15000));
-                const apiPromise = chat.sendMessage(input);
-                const result = await Promise.race([apiPromise, timeoutPromise]);
-                
-                if (!result || !result.response) throw new Error("Resposta vazia");
-                resposta = result.response.text().trim();
-                historicoConversa[jid].push({ role: "user", parts: [{ text: input }] });
-            }
+            const chat = model.startChat({ history: chatHistory });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout Gemini")), 15000));
+            const apiPromise = chat.sendMessage(input);
+            const result = await Promise.race([apiPromise, timeoutPromise]);
+            
+            if (!result || !result.response) throw new Error("Resposta vazia");
+            resposta = result.response.text().trim();
+            historicoConversa[jid].push({ role: "user", parts: [{ text: input }] });
 
             console.log(`[DEBUG IA] Resposta gerada: "${resposta.substring(0, 20)}..."`);
             historicoConversa[jid].push({ role: "model", parts: [{ text: resposta }] });
@@ -470,12 +471,19 @@ if (platform === 'telegram') {
 
         const texto = ctx.message.text || ctx.message.caption || '';
         if(!texto && !ctx.message.voice && !ctx.message.audio) return;
-
+        
         const chatId = ctx.chat.id.toString();
         const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
         const senderName = ctx.from.first_name || 'User';
         const userId = ctx.from.id.toString();
         const isAudio = !!(ctx.message.voice || ctx.message.audio);
+        
+        // Se for apenas áudio sem texto
+        if (isAudio && !texto) {
+            console.log(`[${nomeSessao}] Áudio recebido sem texto de ${chatId}`);
+            await ctx.reply('🎤 Recebi seu áudio! Infelizmente ainda não consigo processar mensagens de voz. Por favor, envie sua mensagem em texto.');
+            return;
+        }
 
         // --- COMANDO !stopsempre (Ignorar Permanente) ---
         if (texto.match(/^[\/!]stopsempre$/i)) {
@@ -676,23 +684,16 @@ if (platform === 'telegram') {
         // 6. Processamento IA
         try {
             ctx.sendChatAction('typing'); 
-            let audioBuffer = null;
-            if (isAudio) {
-                const fileId = ctx.message.voice ? ctx.message.voice.file_id : ctx.message.audio.file_id;
-                const fileLink = await ctx.telegram.getFileLink(fileId);
-                const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
-                audioBuffer = Buffer.from(response.data).toString('base64');
-            }
 
             const promptToUse = (groupConfig && groupConfig.prompt) ? groupConfig.prompt : promptSistemaGlobal;
-            const resposta = await processarComGemini(chatId, isAudio ? audioBuffer : texto, isAudio, promptToUse);
+            const resposta = await processarComGemini(chatId, texto, false, promptToUse);
             
             if(resposta && resposta.trim().length > 0) {
                 await ctx.reply(resposta, { reply_to_message_id: ctx.message.message_id });
                 lastResponseTimes[chatId] = Date.now();
             }
         } catch (e) {
-            console.error("Erro ao responder no Telegram:", e);
+            console.error("Erro ao responder no Telegram:", e.message);
         }
     });
     
@@ -827,6 +828,16 @@ if (platform === 'telegram') {
             let texto = msg.message.conversation || msg.message.extendedTextMessage?.text || 
                         msg.message.imageMessage?.caption || msg.message.videoMessage?.caption || '';
             let isAudio = !!msg.message.audioMessage;
+            
+            // Se for apenas áudio sem texto, enviar mensagem e retornar
+            if (isAudio && !texto) {
+                console.log(`[${nomeSessao}] Áudio recebido sem texto de ${jid}`);
+                await sock.sendMessage(jid, { text: '🎤 Recebi seu áudio! Infelizmente ainda não consigo processar mensagens de voz. Por favor, envie sua mensagem em texto.' }, { quoted: msg });
+                return;
+            }
+            
+            // Se não tiver texto e não for áudio, ignorar
+            if (!texto && !isAudio) return;
 
             // --- LÓGICA DE COBRANÇA (PIX) ---
             if (texto.trim().toUpperCase().startsWith('PAGAR-')) {
@@ -1154,14 +1165,8 @@ if (platform === 'telegram') {
                 await sock.sendPresenceUpdate('composing', jid);
                 await delay(1000); 
                 
-                let audioBuffer = null;
-                if (isAudio) {
-                    console.log(`[DEBUG] Baixando áudio...`);
-                    audioBuffer = (await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage })).toString('base64');
-                }
-
                 const promptToUse = (groupConfig && groupConfig.prompt) ? groupConfig.prompt : promptSistemaGlobal;
-                const resposta = await processarComGemini(jid, isAudio ? audioBuffer : texto, isAudio, promptToUse);
+                const resposta = await processarComGemini(jid, texto, false, promptToUse);
                 
                 if (resposta && resposta.trim().length > 0) {
                     await sock.sendMessage(jid, { text: resposta }, { quoted: msg });
@@ -1178,7 +1183,7 @@ if (platform === 'telegram') {
                 }
                 await sock.sendPresenceUpdate('paused', jid);
             } catch (e) { 
-                console.error('[ERRO CRÍTICO NO LOOP]:', e); 
+                console.error('[ERRO CRÍTICO NO LOOP]:', e.message); 
                 await sock.sendPresenceUpdate('paused', jid);
             }
         });
